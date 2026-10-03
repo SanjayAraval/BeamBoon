@@ -9,7 +9,7 @@ import type { Player } from './Player.ts'
  * of the room; this only adds the colour of the beam.
  */
 export class Flashlight {
-  readonly cone = new LightCone(FLASHLIGHT.radius, FLASHLIGHT.halfAngle)
+  readonly cone = new LightCone(FLASHLIGHT.radius, FLASHLIGHT.halfAngle, FLASHLIGHT.core)
 
   private readonly gfx: Phaser.GameObjects.Graphics
 

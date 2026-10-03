@@ -41,6 +41,12 @@ const FALLOFF_LAYERS = 8
 const LAYER_ALPHA = 0.32
 
 /**
+ * Fraction of the beam that is at full brightness. Outside it the light
+ * ramps down to nothing at the rim.
+ */
+const BEAM_CORE = 0.62
+
+/**
  * Darkness is painted once at full strength outside the cone, then again for
  * each of these progressively tighter cones. Stacking the alphas is what
  * turns a hard-edged wedge into a beam that fades towards its rim and tip.
@@ -48,8 +54,8 @@ const LAYER_ALPHA = 0.32
 const falloff: FalloffLayer[] = Array.from({ length: FALLOFF_LAYERS }, (_unused, index) => {
   const t = (index + 1) / FALLOFF_LAYERS
   return {
-    radius: 1 - 0.38 * t,
-    halfAngle: 1 - 0.38 * t,
+    radius: 1 - (1 - BEAM_CORE) * t,
+    halfAngle: 1 - (1 - BEAM_CORE) * t,
     alpha: LAYER_ALPHA,
   }
 })
@@ -59,5 +65,6 @@ export const FLASHLIGHT = {
   radius: 320,
   /** Half the opening angle of the cone. */
   halfAngle: degrees(26),
+  core: BEAM_CORE,
   falloff,
 }

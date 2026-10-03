@@ -15,10 +15,13 @@ export class LightCone {
 
   radius: number
   halfAngle: number
+  /** Fraction of the cone that is at full brightness; the rest ramps off. */
+  core: number
 
-  constructor(radius: number, halfAngle: number) {
+  constructor(radius: number, halfAngle: number, core = 0.6) {
     this.radius = radius
     this.halfAngle = halfAngle
+    this.core = core
   }
 
   /** Moves the apex to (x, y) and points the cone at (targetX, targetY). */
@@ -49,6 +52,36 @@ export class LightCone {
     }
     const offset = Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - this.direction)
     return Math.abs(offset) <= halfAngle
+  }
+
+  /**
+   * How brightly (x, y) is lit, from 0 outside the cone to 1 in its core.
+   * Mirrors the ramp the darkness overlay draws, so a figure's brightness
+   * matches the patch of floor it is standing on.
+   */
+  intensityAt(x: number, y: number): number {
+    const dx = x - this.x
+    const dy = y - this.y
+    const distance = Math.hypot(dx, dy)
+    if (distance > this.radius) {
+      return 0
+    }
+    if (distance === 0) {
+      return 1
+    }
+    const offset = Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - this.direction))
+    if (offset > this.halfAngle) {
+      return 0
+    }
+    return Math.min(
+      this.ramp(distance / this.radius),
+      this.ramp(offset / this.halfAngle),
+    )
+  }
+
+  /** 1 inside the core, falling linearly to 0 at the edge. */
+  private ramp(fraction: number): number {
+    return 1 - Phaser.Math.Clamp((fraction - this.core) / (1 - this.core), 0, 1)
   }
 
   /**
