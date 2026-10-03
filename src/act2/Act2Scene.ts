@@ -1,5 +1,7 @@
 import Phaser from 'phaser'
 import { GAME_HEIGHT, GAME_WIDTH } from '../core/config.ts'
+import { DarknessOverlay } from '../core/DarknessOverlay.ts'
+import { Flashlight } from '../core/Flashlight.ts'
 import { Player } from '../core/Player.ts'
 import { drawRoom } from '../core/room.ts'
 
@@ -10,6 +12,8 @@ import { drawRoom } from '../core/room.ts'
  */
 export class Act2Scene extends Phaser.Scene {
   private player!: Player
+  private flashlight!: Flashlight
+  private darkness!: DarknessOverlay
 
   constructor() {
     super('act2')
@@ -18,9 +22,13 @@ export class Act2Scene extends Phaser.Scene {
   create(): void {
     drawRoom(this)
     this.player = new Player(this, GAME_WIDTH * 0.5, GAME_HEIGHT * 0.72)
+    this.flashlight = new Flashlight(this)
+    this.darkness = new DarknessOverlay(this)
   }
 
   update(_time: number, delta: number): void {
     this.player.update(delta)
+    this.flashlight.update(this.player, this.input.activePointer)
+    this.darkness.update(this.flashlight.cone)
   }
 }

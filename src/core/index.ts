@@ -1,3 +1,6 @@
-export { COLORS, DEPTH, GAME_HEIGHT, GAME_WIDTH } from './config.ts'
+export { COLORS, DEPTH, FLASHLIGHT, GAME_HEIGHT, GAME_WIDTH } from './config.ts'
+export { DarknessOverlay } from './DarknessOverlay.ts'
+export { Flashlight } from './Flashlight.ts'
+export { LightCone } from './LightCone.ts'
 export { Player } from './Player.ts'
 export { drawRoom, FLOOR_BOUNDS, WALL } from './room.ts'
