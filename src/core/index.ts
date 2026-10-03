@@ -1,5 +1,6 @@
 export { COLORS, DEPTH, FLASHLIGHT, GAME_HEIGHT, GAME_WIDTH } from './config.ts'
 export { DarknessOverlay } from './DarknessOverlay.ts'
+export { Enemy } from './Enemy.ts'
 export { Flashlight } from './Flashlight.ts'
 export { LightCone } from './LightCone.ts'
 export { Player } from './Player.ts'
