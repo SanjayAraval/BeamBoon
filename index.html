@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CoverUp - Comic Noir Horror 3D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Special+Elite&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/index.css">
+</head>
+<body>
+  <!-- Canvas container for Three.js -->
+  <div id="error-log" style="position:absolute; top:0; left:0; z-index:9999; color:red; font-size:20px; font-weight:bold; background:black; white-space:pre-wrap;"></div>
+  <script>
+    window.onerror = function(msg, url, line, col, error) {
+      document.getElementById('error-log').innerText += '\n' + msg;
+    };
+    window.onunhandledrejection = function(event) {
+      document.getElementById('error-log').innerText += '\n' + event.reason;
+    };
+  </script>
+  <div id="game-container">
+    <canvas id="webgl-canvas"></canvas>
+  </div>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="overlay active">
+    <div class="loading-content">
+      <h1 class="comic-title">COVER<span class="highlight">UP</span></h1>
+      <div class="loading-bar-container">
+        <div id="loading-bar" class="loading-bar"></div>
+      </div>
+      <p id="loading-status">Generating procedural textures & audio synthesis...</p>
+    </div>
+  </div>
+
+  <!-- Title Screen -->
+  <div id="title-screen" class="overlay">
+    <div class="title-panel comic-box">
+      <h1 class="comic-title-large">COVER<span class="highlight">UP</span></h1>
+      <p class="subtitle">A Dark Psychological Comic-Noir Nightmare</p>
+      
+      <div class="story-teaser">
+        <p>"It was supposed to be a quiet Friday night horror movie. Then the figures appeared at the door..."</p>
+      </div>
+
+      <div class="menu-actions">
+        <button id="btn-start" class="btn-comic">START NIGHTMARE</button>
+        <button id="btn-settings" class="btn-comic btn-secondary">SETTINGS & CONTROLS</button>
+      </div>
+
+      <div class="controls-cheat">
+        <h3>CONTROLS</h3>
+        <div class="controls-grid">
+          <div><span class="key">WASD</span> Move</div>
+          <div><span class="key">MOUSE</span> Look (Pointer Lock)</div>
+          <div><span class="key">E</span> Interact / Hide / Clean</div>
+          <div><span class="key">F</span> Toggle Flashlight</div>
+          <div><span class="key">1 / 2</span> Switch Weapon</div>
+          <div><span class="key">L-CLICK</span> Attack / Shoot</div>
+          <div><span class="key">T</span> Talk at Door</div>
+          <div><span class="key">ESC</span> Pause Menu</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Click to Play Overlay (Pointer Lock request) -->
+  <div id="click-to-play" class="overlay hidden" style="background: rgba(0,0,0,0.8); cursor: pointer; z-index: 1000;">
+    <h1 class="comic-title">CLICK TO PLAY</h1>
+  </div>
+
+  <!-- Flash Overlay -->
+  <div id="flash-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; z-index: 9000;"></div>
+
+  <!-- Fade Overlay -->
+  <div id="fade-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: black; pointer-events: none; opacity: 0; transition: opacity 0.6s ease; z-index: 8000;"></div>
+
+  <!-- Debug Overlay (F3) -->
+  <div id="debug-overlay" class="hidden" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: lime; font-family: monospace; font-size: 14px; padding: 10px; z-index: 9999; pointer-events: none; text-align: right;">
+    <div id="debug-fps">FPS: 0</div>
+    <div id="debug-pos">Pos: 0, 0, 0</div>
+    <div id="debug-lock">Lock: false</div>
+    <div id="debug-state">State: TITLE</div>
+    <div id="debug-keys">Keys: NONE</div>
+    <div id="debug-light">Light: 0</div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="overlay hidden">
+    <div class="comic-box settings-box">
+      <h2>GAME SETTINGS</h2>
+      
+      <div class="setting-row">
+        <label for="slider-volume">Master Volume</label>
+        <input type="range" id="slider-volume" min="0" max="100" value="80">
+        <span id="val-volume">80%</span>
+      </div>
+
+      <div class="setting-row">
+        <label for="slider-sensitivity">Mouse Sensitivity</label>
+        <input type="range" id="slider-sensitivity" min="1" max="10" value="5">
+        <span id="val-sensitivity">5.0</span>
+      </div>
+
+      <div class="setting-row">
+        <label for="select-quality">Graphics Quality</label>
+        <select id="select-quality">
+          <option value="medium" selected>Medium (Recommended - 60 FPS)</option>
+          <option value="low">Low (Fast - Low Shadows)</option>
+          <option value="high">High (Full Halftone & Shadows)</option>
+        </select>
+      </div>
+
+      <div class="setting-row">
+        <label for="slider-brightness">Brightness</label>
+        <input type="range" id="slider-brightness" min="0.7" max="1.6" step="0.1" value="1.0">
+        <span id="val-brightness">1.0</span>
+      </div>
+
+      <div class="setting-row">
+        <label for="chk-headbob">Enable Head Bob</label>
+        <input type="checkbox" id="chk-headbob" checked>
+      </div>
+
+      <button id="btn-close-settings" class="btn-comic">BACK</button>
+    </div>
+  </div>
+
+  <!-- HUD Overlay -->
+  <div id="hud" class="hud-container hidden">
+    <!-- Objective Caption -->
+      <div id="objective-caption" class="comic-panel hidden" style="position: absolute; top: 10%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.5s ease-in-out; text-align: center; z-index: 50;">
+  <div id="objective-text" class="comic-text" style="font-size: 24px;"></div>
+</div>
+<div id="skip-hint" class="comic-text hidden" style="position: absolute; bottom: 20px; right: 20px; font-size: 18px; color: white; opacity: 0.7; z-index: 50;">Hold SPACE to skip</div>
+<div id="narrator-caption" class="narrator-caption hidden" style="position:absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 1.2rem; transition: opacity 0.5s;">
+      <div id="objective-text"></div>
+    </div>
+    <!-- Paranoia Bar -->
+    <div class="paranoia-container">
+      <div class="paranoia-label">PARANOIA</div>
+      <div class="paranoia-bar-bg">
+        <div id="paranoia-fill" class="paranoia-bar-fill"></div>
+      </div>
+      <div id="paranoia-val" class="paranoia-num">0%</div>
+    </div>
+
+    <!-- Flashlight & Weapon Status -->
+    <div class="hud-bottom-right">
+      <div id="hud-flashlight" class="hud-item">
+        <span class="hud-icon">🔦</span> <span id="flashlight-status">ON</span>
+      </div>
+      <div id="hud-weapon" class="hud-item">
+        <span class="hud-icon">🗡️</span> <span id="weapon-name">UNARMED</span>
+      </div>
+    </div>
+
+    <!-- Interaction Prompt -->
+    <div id="interaction-prompt" class="interaction-prompt hidden">
+      <span class="key-badge">E</span> <span id="interaction-text">Interact</span>
+    </div>
+
+    <!-- Door Interaction Popup (Talk or Attack) -->
+    <div id="door-prompt" class="door-prompt hidden">
+      <div class="door-prompt-box comic-box">
+        <h3>VISITOR AT THE DOOR!</h3>
+        <p id="door-visitor-desc">Someone is knocking on the front door...</p>
+        <div class="door-choices">
+          <button id="btn-door-talk" class="btn-comic-sm"><span class="key-badge">T</span> TALK / EXCUSE</button>
+          <button id="btn-door-attack" class="btn-comic-sm btn-danger hidden"><span class="key-badge">L-CLICK</span> ATTACK!</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reticle -->
+    <div id="crosshair" class="crosshair"></div>
+  </div>
+
+  <!-- Comic Popups & Caption Overlay -->
+  <div id="comic-overlay" class="comic-overlay pointer-events-none">
+    <div id="narrator-caption" class="narrator-caption hidden">
+      <div id="narrator-text">"It was just a shadow... wasn't it?"</div>
+    </div>
+    
+    <!-- Onomatopoeia container for floating popups like BANG!, KNOCK KNOCK! -->
+    <div id="onomatopoeia-container"></div>
+  </div>
+
+  <!-- Fullscreen Offscreen Violence Cut to Black Screen -->
+  <div id="bang-overlay" class="bang-overlay hidden">
+    <div id="bang-text" class="bang-text">BANG!</div>
+  </div>
+
+  <!-- Opening Montage Overlay -->
+  <div id="montage-overlay" class="montage-overlay hidden">
+    <div id="montage-card" class="comic-box montage-card">
+      <div class="montage-header">
+        <span id="montage-step">PANEL 1 OF 6</span>
+        <h2 id="montage-title">THE SHADOW IN THE HALL</h2>
+      </div>
+      <p id="montage-text" class="montage-text">Story text goes here...</p>
+      <div id="montage-clue-hint" class="montage-clue-hint">
+        🔍 <span id="clue-status">Look around the 3D scene to find the clue!</span>
+      </div>
+      <button id="btn-montage-next" class="btn-comic hidden">CONTINUE &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Door Peephole Overlay -->
+  <div id="peephole-overlay" class="peephole-overlay hidden">
+    <div class="peephole-vignette"></div>
+    <div class="peephole-hint">Press <span class="key">E</span>, <span class="key">Q</span>, or Right-Click to exit peephole</div>
+  </div>
+
+  <!-- Pause Overlay -->
+  <div id="pause-overlay" class="overlay hidden" style="cursor:pointer; display:none; flex-direction:column; justify-content:center; align-items:center; z-index: 1000; background:rgba(0,0,0,0.7);">
+    <div class="comic-box" style="pointer-events: none; text-align: center;">
+      <h2>PAUSED</h2>
+      <p>Click to resume</p>
+    </div>
+  </div>
+
+  <!-- Epilogue Ending Screen -->
+  <div id="ending-screen" class="overlay hidden">
+    <div class="comic-box ending-box">
+      <h1 id="ending-title" class="ending-title">ENDING: CAUGHT</h1>
+      <div id="ending-comic-panel" class="ending-comic-panel">
+        <p id="ending-story" class="ending-story"></p>
+      </div>
+      <div class="ending-stats">
+        <div class="stat-item"><span>Final Paranoia:</span> <strong id="stat-paranoia">0%</strong></div>
+        <div class="stat-item"><span>Total Noise Caused:</span> <strong id="stat-noise">0</strong></div>
+        <div class="stat-item"><span>Evidence Left Uncleaned:</span> <strong id="stat-evidence">0</strong></div>
+        <div class="stat-item"><span>Visitors Struck:</span> <strong id="stat-visitors">0</strong></div>
+      </div>
+      <button id="btn-ending-restart" class="btn-comic">TRY AGAIN</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
