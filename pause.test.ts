@@ -1,7 +1,6 @@
 import { GameFlow, GamePhase } from './src/game/GameFlow';
 import { Player } from './src/core/Player';
 import { Flashlight } from './src/core/Flashlight';
-import { Paranoia } from './src/game/Paranoia';
 import * as THREE from 'three';
 
 // Mock DOM for Player
@@ -24,7 +23,8 @@ const flashlight = new Flashlight(scene, camera);
 const mockHouse = {
   lightManager: {
     turnOffAll: () => {},
-    turnOnAll: () => {}
+    turnOnAll: () => {},
+    isRoomLit: () => false
   }
 } as any;
 
@@ -49,8 +49,9 @@ const mockHud = {
   hideCrosshair: () => {}
 } as any;
 
-const player = new Player(camera, []);
-const gameFlow = new GameFlow(scene, mockHouse, player, mockNarration, mockSound, mockHud);
+const mockEvidence = {} as any;
+const player = new Player(camera);
+const gameFlow = new GameFlow(scene, mockHouse, player, mockEvidence, mockNarration, mockHud, () => {});
 
 let gameTime = 0;
 let timeDelta = 0.1; // 100ms per frame

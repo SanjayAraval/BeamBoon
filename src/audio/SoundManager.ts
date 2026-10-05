@@ -36,7 +36,7 @@ export class SoundManager {
     window.addEventListener('keydown', unlock);
   }
 
-    private ambientInterval: number | null = null;
+    private ambientInterval: ReturnType<typeof setInterval> | null = null;
   public setPhaseAudio(phase: number): void {
     if (this.ambientInterval) {
       clearInterval(this.ambientInterval);

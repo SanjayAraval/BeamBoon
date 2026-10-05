@@ -102,7 +102,7 @@ scene.updateMatrixWorld(true);
 
 system.update(camera, camera.position, colliders, 0);
 system.interact(); // Should trigger lamp_1
-assert(lampToggled === true, 'Toggling a lamp changes its state via onInteract');
+assert((lampToggled as boolean) === true, 'Toggling a lamp changes its state via onInteract');
 
 if (failCount > 0) {
   process.exit(1);

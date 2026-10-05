@@ -103,5 +103,24 @@ for (const c of house.collisionBoxes) {
 }
 assert('No colliders between peephole and visitor', !blocked);
 
+// 5. The real PeepholeManager must still face the porch after update() runs
+{
+  const g = globalThis as any;
+  g.window = g.window || {};
+  g.window.addEventListener = g.window.addEventListener || (() => {});
+  g.window.innerWidth = g.window.innerWidth || 1280;
+  g.window.innerHeight = g.window.innerHeight || 720;
+  const { PeepholeManager } = await import('./src/world/PeepholeManager');
+  const mockPlayer = { setFrozen: () => {}, getCamera: () => new THREE.PerspectiveCamera() } as any;
+  const pm = new PeepholeManager(mockPlayer, { show: () => {}, hide: () => {} } as any);
+  pm.enter({ setCamera: () => {} });
+  pm.update(0.016, 0);
+  const cam = pm.getCamera();
+  cam.updateMatrixWorld();
+  const dir = new THREE.Vector3();
+  cam.getWorldDirection(dir);
+  assert('PeepholeManager camera faces the porch (+Z) after update()', dir.z > 0.9);
+}
+
 if (!allPass) process.exit(1);
 console.log('=== PEEPHOLE TESTS PASSED ===');

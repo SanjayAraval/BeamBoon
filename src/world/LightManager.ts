@@ -36,6 +36,7 @@ export class LightManager {
   private isFlashing = false;
   private flashStartTime = 0;
   private brightnessScalar = 1.0;
+  private phaseHemiColor = 0x223044;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -175,7 +176,6 @@ export class LightManager {
     return switches;
   }
 
-    // REPLACED
     public triggerFlicker(id: string, intensity: number): void {
     const state = this.lights.get(id);
     if (state && state.pointLight) {
@@ -184,41 +184,24 @@ export class LightManager {
     }
   }
 
-  public setPhaseLighting_OLD(phase: number): void {
-    if (phase === GamePhase.ACT1_MOVIE) { // ACT1_MOVIE
-      this.setHouseLightsOn(false);
-      const lamp = this.lights.get('lamp_living');
-      if (lamp) lamp.isOn = true;
-      const tv = this.lights.get('tv');
-      if (tv) tv.isOn = true;
-    } else if (phase === GamePhase.ACT1_BLACKOUT || phase === GamePhase.ACT2_COVERUP) { // BLACKOUT or COVERUP
-      this.setHouseLightsOn(false);
-      const tv = this.lights.get('tv');
-      if (tv) tv.isOn = false;
-    } else if (phase === GamePhase.ACT1_POWER_BACK) { // POWER_BACK
-      this.setHouseLightsOn(true);
-      const tv = this.lights.get('tv');
-      if (tv) tv.isOn = false;
-    }
-  }
   public setPhaseLighting(phase: number): void {
-    if (phase === GamePhase.ACT1_MOVIE) { // ACT1_MOVIE
+    if (phase === GamePhase.ACT1_INTRO || phase === GamePhase.ACT1_MOVIE) { // only the living room lamp and the TV
       this.setHouseLightsOn(false);
       const lamp = this.lights.get('lamp_living');
       if (lamp) lamp.isOn = true;
       const tv = this.lights.get('tv');
       if (tv) tv.isOn = true;
-      this.hemiLight.color.setHex(0x223044); // cold outside, warm inside (handled by lights)
+      this.phaseHemiColor = 0x223044; // cold outside, warm inside (handled by lights)
     } else if (phase === GamePhase.ACT1_BLACKOUT || phase === GamePhase.ACT2_COVERUP) { // BLACKOUT or COVERUP
       this.setHouseLightsOn(false);
       const tv = this.lights.get('tv');
       if (tv) tv.isOn = false;
-      this.hemiLight.color.setHex(0x182535); // colder
+      this.phaseHemiColor = 0x182535; // colder
     } else if (phase === GamePhase.ACT1_POWER_BACK) { // POWER_BACK
       this.setHouseLightsOn(true);
       const tv = this.lights.get('tv');
       if (tv) tv.isOn = false;
-      this.hemiLight.color.setHex(0x333333); // normal warm
+      this.phaseHemiColor = 0x333333; // normal warm
     }
     
     // Print the light list
@@ -253,6 +236,18 @@ export class LightManager {
   }
   public getLight(id: string) {
     return this.lights.get(id);
+  }
+
+  public setLightOn(id: string, on: boolean): void {
+    const state = this.lights.get(id);
+    if (state) state.isOn = on;
+  }
+
+  public isRoomLit(roomName: string): boolean {
+    for (const state of this.lights.values()) {
+      if (state.isOn && state.def.room === roomName) return true;
+    }
+    return false;
   }
 
   public toggleLight(id: string): boolean {
@@ -292,7 +287,7 @@ export class LightManager {
       this.hemiLight.color.setHex(0x182535); 
     } else {
       this.ambientLight.intensity = base;
-      this.hemiLight.color.setHex(0x223044);
+      this.hemiLight.color.setHex(this.phaseHemiColor);
     }
     
     // Calculate allowed lights (top 6 closest ON lights)
@@ -375,7 +370,7 @@ export class LightManager {
     
     // Turn off unused pool lights smoothly
     for (const p of this.pointLightPool) {
-      if (!(p as any)._matched) {
+      if (!(p as any)._assignedId) {
         p.intensity *= (1.0 - Math.min(delta * 5.0, 1.0));
         if (p.intensity < 0.01) p.intensity = 0;
       }

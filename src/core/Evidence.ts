@@ -1,4 +1,5 @@
 // Evidence and Suspicion Tracker for Act 2 Cover-Up mechanics
+import { npcLayout } from '../world/npcLayout';
 
 export interface BloodTrace {
   id: string;
@@ -9,6 +10,7 @@ export interface BloodTrace {
 export interface BodyEvidence {
   id: string;
   name: string;
+  kind: 'mother' | 'father';
   position: { x: number; y: number; z: number };
   isHidden: boolean; // True if hidden inside closet or under bed
 }
@@ -33,12 +35,13 @@ export class Evidence {
     this.curtainsClosed = false;
     this.pistolHidden = false;
 
-    // Initial evidence from Act 1: 2 bodies in living room, 2 blood stains
-    this.addBody('Father', { x: 0, y: 0.2, z: -2.5 });
-    this.addBody('Mother', { x: 1.2, y: 0.2, z: -3.0 });
+    // Initial evidence from Act 1: placed where the parents fall (npcLayout.deadPoses)
+    const { mother, father } = npcLayout.deadPoses;
+    this.addBody('Father', 'father', { x: father.x, y: 0.2, z: father.z });
+    this.addBody('Mother', 'mother', { x: mother.x, y: 0.2, z: mother.z });
 
-    this.addBloodTrace({ x: 0.2, y: 0.02, z: -2.3 });
-    this.addBloodTrace({ x: 1.0, y: 0.02, z: -2.8 });
+    this.addBloodTrace({ x: father.bloodX, y: 0.02, z: father.bloodZ });
+    this.addBloodTrace({ x: mother.bloodX, y: 0.02, z: mother.bloodZ });
   }
 
   public addNoise(amount: number): void {
@@ -61,7 +64,7 @@ export class Evidence {
 
   public addBloodTrace(pos: { x: number; y: number; z: number }): void {
     this.bloodTraces.push({
-      id: `trace_${Date.now()}_${Math.random()}`,
+      id: `trace_${this.bloodTraces.length}`,
       position: pos,
       cleaned: false
     });
@@ -80,10 +83,11 @@ export class Evidence {
     return this.bloodTraces;
   }
 
-  public addBody(name: string, pos: { x: number; y: number; z: number }): void {
+  public addBody(name: string, kind: 'mother' | 'father', pos: { x: number; y: number; z: number }): void {
     this.bodies.push({
-      id: `body_${Date.now()}_${Math.random()}`,
+      id: `body_${kind}`,
       name,
+      kind,
       position: pos,
       isHidden: false
     });

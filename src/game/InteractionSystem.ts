@@ -71,6 +71,19 @@ export class InteractionSystem {
     this.interactables.push(interactable);
   }
 
+  public unregister(id: string): void {
+    const idx = this.interactables.findIndex(i => i.id === id);
+    if (idx === -1) return;
+    const interactable = this.interactables[idx];
+    if (this.focused === interactable) this.clearFocus();
+    if (interactable.hitMesh) {
+      this.hitMeshesGroup.remove(interactable.hitMesh);
+      interactable.hitMesh.geometry.dispose();
+      (interactable.hitMesh.material as THREE.Material).dispose();
+    }
+    this.interactables.splice(idx, 1);
+  }
+
   private createHitMesh(interactable: Interactable): THREE.Mesh {
     let size = 0.5; // default lamp size
     if (interactable.id.includes('switch') || interactable.id.includes('peephole')) size = 0.25;
@@ -139,16 +152,6 @@ export class InteractionSystem {
       }
     }
     
-    // Check non-mesh positional interactables just in case
-    for (const int of this.interactables) {
-      if (!int.mesh && int.position) {
-        // basic distance and angle check for positional ones?
-        // Actually, we gave them a hitMesh in register(), so they are covered.
-        // Wait, if !interactable.mesh, createHitMesh sets position. But hitMeshesGroup only gets it if int.mesh is true.
-        // Let's fix that below.
-      }
-    }
-
     if (this.focused !== nearestInteractable) {
       this.clearFocus();
       this.focused = nearestInteractable;

@@ -36,7 +36,6 @@ const house = new House(scene);
 house.updateDoors(1.0); // force update
 
 const colliders = (house as any).collisionBoxes;
-const props = houseLayout.props || []; // if needed
 
 for (const doorDef of houseLayout.doors) {
   if (doorDef.isArchway) continue;

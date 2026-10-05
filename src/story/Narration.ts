@@ -18,6 +18,7 @@ export class Narration {
     this.textElement = document.getElementById('narrator-text');
 
     this.registerBeat('act1_intro', '"It was just another Friday night horror movie marathon..."', 4.0);
+    this.registerBeat('act1_movie', '"The movie droned on. Every creak in the house sounded like footsteps."', 4.0);
     this.registerBeat('act1_shadows', '"The shadows in the hall seemed taller tonight. Or was it just his mind playing tricks?"', 4.5);
     this.registerBeat('act1_defended', '"The gun dropped from his trembling hands... as the room flooded with light."', 5.0);
     this.registerBeat('act2_coverup', '"No time to panic. If anyone sees this... it\'s over. He had to cover it up."', 5.0);

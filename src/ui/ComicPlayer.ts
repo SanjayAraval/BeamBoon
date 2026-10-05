@@ -256,7 +256,8 @@ export class ComicPlayer {
             const text = def.caption;
             const typeInterval = setInterval(() => {
                 if (charIdx < text.length && this.isPlaying) {
-                    cap.innerText += text[charIdx];
+                    // textContent, not innerText: innerText drops the trailing space on every read
+                    cap.textContent += text[charIdx];
                     charIdx++;
                 } else {
                     clearInterval(typeInterval);

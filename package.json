@@ -11,13 +11,17 @@
     "test:npc": "tsx npc.test.ts",
     "test:peephole": "tsx peephole.test.ts",
     "test:interact": "tsx interact.test.ts",
-    "test:flow": "tsx flow.test.ts", "test:pause": "tsx pause.test.ts",
-    "test:doors": "tsx doors.test.ts", "test": "npm run test:walk && npm run test:npc && npm run test:peephole && npm run test:interact && npm run test:doors && npm run test:flow && npm run test:pause"
+    "test:flow": "tsx flow.test.ts",
+    "test:pause": "tsx pause.test.ts",
+    "test:doors": "tsx doors.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "test": "npm run typecheck && npm run test:walk && npm run test:npc && npm run test:peephole && npm run test:interact && npm run test:doors && npm run test:flow && npm run test:pause"
   },
   "dependencies": {
     "three": "^0.160.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.4",
     "@types/three": "^0.160.0",
     "tsx": "^4.23.15",
     "typescript": "^5.2.2",

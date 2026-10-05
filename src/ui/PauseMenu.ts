@@ -1,13 +1,13 @@
-// Pause menu controller
+// Pause menu controller (drives #pause-overlay)
 
 export class PauseMenu {
   private pauseElement: HTMLElement | null;
-  private isPaused = false;
+  private visible = false;
   private onResumeCallback: () => void;
   private onRestartCallback: () => void;
 
   constructor(onResume: () => void, onRestart: () => void) {
-    this.pauseElement = document.getElementById('pause-menu');
+    this.pauseElement = document.getElementById('pause-overlay');
     this.onResumeCallback = onResume;
     this.onRestartCallback = onRestart;
 
@@ -20,18 +20,13 @@ export class PauseMenu {
     const btnSettings = document.getElementById('btn-pause-settings');
     const settingsModal = document.getElementById('settings-modal');
 
+    // Resume must run inside the click handler: requestPointerLock needs a user gesture
     if (btnResume) {
-      btnResume.onclick = () => {
-        this.hide();
-        this.onResumeCallback();
-      };
+      btnResume.onclick = () => this.onResumeCallback();
     }
 
     if (btnRestart) {
-      btnRestart.onclick = () => {
-        this.hide();
-        this.onRestartCallback();
-      };
+      btnRestart.onclick = () => this.onRestartCallback();
     }
 
     if (btnSettings && settingsModal) {
@@ -42,22 +37,16 @@ export class PauseMenu {
   }
 
   public show(): void {
-    this.isPaused = true;
+    this.visible = true;
     if (this.pauseElement) this.pauseElement.classList.remove('hidden');
   }
 
   public hide(): void {
-    this.isPaused = false;
+    this.visible = false;
     if (this.pauseElement) this.pauseElement.classList.add('hidden');
   }
 
-  public toggle(): boolean {
-    if (this.isPaused) {
-      this.hide();
-      this.onResumeCallback();
-    } else {
-      this.show();
-    }
-    return this.isPaused;
+  public isVisible(): boolean {
+    return this.visible;
   }
 }

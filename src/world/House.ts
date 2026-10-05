@@ -47,6 +47,7 @@ export class House {
     this.buildOutside();
     this.curtainsMesh = new THREE.Mesh();
     this.buildProps();
+    this.setCurtainsClosed(false);
 
     // Add switches from LightManager to interactive props
     const switches = this.lightManager.getSwitches();
@@ -246,11 +247,22 @@ export class House {
       door.pivot.rotation.y = THREE.MathUtils.lerp(door.pivot.rotation.y, target, delta * speed);
       door.pivot.updateMatrixWorld(true);
       
-      door.collider.enabled = !door.isOpen;
-      if (!door.isOpen) {
+      // Only block once the slab has actually swung shut, so a closing door can't trap the player mid-swing
+      const shut = !door.isOpen && Math.abs(door.pivot.rotation.y - door.closedAngle) < 0.05;
+      door.collider.enabled = shut;
+      if (shut) {
         door.collider.box.setFromObject(door.mesh);
       }
     }
+  }
+
+  public setCurtainsClosed(closed: boolean): void {
+    this.isCurtainsClosed = closed;
+    const def = propsLayout.find(p => p.interactable === 'curtains');
+    if (!def) return;
+    // Open = bunched up against the left edge of the window
+    this.curtainsMesh.scale.x = closed ? 1 : 0.15;
+    this.curtainsMesh.position.x = closed ? def.x : def.x - def.d * 0.425;
   }
 
   private buildStaircase(): void {
@@ -463,6 +475,9 @@ export class House {
            this.collisionBoxes.push({ box: new THREE.Box3().setFromObject(mesh), level: p.floor, enabled: true, propId: p.id });
          }
 
+         if (p.interactable === 'curtains') {
+           this.curtainsMesh = mesh;
+         }
          if (p.interactable) {
            this.interactiveProps.push({ id: p.id, name: p.name, mesh, interactionType: p.interactable, position: mesh.position.clone() });
          }

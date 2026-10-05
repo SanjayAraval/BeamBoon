@@ -21,10 +21,12 @@ After the shooting, the lights come on, and he realizes what he has done. The re
 | **Interact / Clean / Hide** | `E` |
 | **Toggle Flashlight** | `F` |
 | **Switch Weapon** | `1` (Knife) / `2` (Pistol) / `Scroll` |
+| **Exit Peephole** | `E` / `Q` / `Right Click` |
 | **Attack / Shoot** | `Left Click` |
-| **Talk at Front Door** | `T` |
+| **Talk at Front Door** | `T` (stand near the front door) |
 | **Pause Menu** | `ESC` |
-| **Restart Game** | `R` |
+| **Restart Game** | `R` twice |
+| **Flee (Run ending)** | `E` twice on the rear door during the cover-up |
 
 ---
 

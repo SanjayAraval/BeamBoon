@@ -38,7 +38,7 @@ export class PeepholeManager {
 
   public enter(flashlight: any): void {
     this.active = true;
-    this.player.setLocked(false); // Lock player movement (stops WASD)
+    this.player.setFrozen(true); // stop WASD / mouse look on the player camera
     this.peepholeUI.show();
     this.yaw = 0;
     this.pitch = 0;
@@ -47,7 +47,7 @@ export class PeepholeManager {
 
   public exit(flashlight: any): void {
     this.active = false;
-    this.player.setLocked(true); // Re-enable player movement
+    this.player.setFrozen(false);
     this.peepholeUI.hide();
     flashlight.setCamera(this.player.getCamera());
   }
@@ -58,6 +58,11 @@ export class PeepholeManager {
 
   public getCamera(): THREE.PerspectiveCamera {
     return this.camera;
+  }
+
+  public setAspect(aspect: number): void {
+    this.camera.aspect = aspect;
+    this.camera.updateProjectionMatrix();
   }
 
   public update(delta: number, time: number): void {
@@ -72,8 +77,8 @@ export class PeepholeManager {
     const euler = new THREE.Euler(this.pitch + swayY, this.yaw + swayX, 0, 'YXZ');
     const quaternion = new THREE.Quaternion().setFromEuler(euler);
     
-    // Base rotation is facing +Z
-    const baseQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0); // Already faces +Z by default
+    // Cameras look down -Z by default; turn 180 degrees so the peephole faces the porch (+Z)
+    const baseQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
     this.camera.quaternion.copy(baseQuat).multiply(quaternion);
   }
 }

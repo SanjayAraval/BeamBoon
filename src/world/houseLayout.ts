@@ -141,8 +141,23 @@ export const houseLayout: LayoutDef = {
     steps: 16
   },
   spawns: {
-    player: new THREE.Vector3(3.0, 0, 9.0),
+    player: new THREE.Vector3(4.3, 0, 6.5), // where ACT1_MOVIE places the player
     parents: new THREE.Vector3(7.4, 0, 11.2),
     visitor: new THREE.Vector3(7.4, 0, 13.3)
   }
 };
+
+// Returns the smallest room containing the point (so the walk-in closet wins over the master bedroom)
+export function findRoom(x: number, z: number, floor: number): RoomDef | null {
+  let best: RoomDef | null = null;
+  let bestArea = Infinity;
+  for (const r of houseLayout.rooms) {
+    if (r.floor !== floor || x < r.xMin || x > r.xMax || z < r.zMin || z > r.zMax) continue;
+    const area = (r.xMax - r.xMin) * (r.zMax - r.zMin);
+    if (area < bestArea) {
+      bestArea = area;
+      best = r;
+    }
+  }
+  return best;
+}

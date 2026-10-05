@@ -2,7 +2,7 @@ import { Evidence } from './Evidence';
 import { Character, createCharacter } from '../world/characters';
 
 export interface VisitorInfo {
-  type: 'neighbor' | 'officer' | 'partner' | 'inspector';
+  type: 'neighbour' | 'officer' | 'partner';
   name: string;
   skepticism: number; // 0.5 to 0.9
   requiredTraces: number;
@@ -10,20 +10,32 @@ export interface VisitorInfo {
   dialogueFail: string;
 }
 
+export type TalkOutcome = 'success' | 'fail' | 'forced_entry';
+
+// After this many failed excuses the visitor stops listening and pushes inside.
+const MAX_FAILED_TALKS = 2;
+// After this many ignored knocks the visitor gives up (neighbour) or forces entry (police).
+const MAX_UNREPLIED_KNOCKS = 3;
+const TALK_COOLDOWN = 3.0;
+
 export class VisitorManager {
   private activeVisitor: VisitorInfo | null = null;
   private currentFigure: Character | null = null;
   private isKnocking = false;
   private unrepliedKnocks = 0;
+  private failedTalks = 0;
+  private talkCooldown = 0;
 
   public spawnVisitor(info: VisitorInfo): void {
     this.activeVisitor = info;
-    this.currentFigure = createCharacter(this.activeVisitor.type as any);
+    this.currentFigure = createCharacter(this.activeVisitor.type);
     this.currentFigure.root.position.set(7.4, 0, 12.6);
     this.currentFigure.root.rotation.y = Math.PI;
     this.currentFigure.setPose('knock');
     this.isKnocking = true;
     this.unrepliedKnocks = 0;
+    this.failedTalks = 0;
+    this.talkCooldown = 0;
   }
 
   public triggerKnock(): void {
@@ -47,24 +59,31 @@ export class VisitorManager {
     return this.unrepliedKnocks;
   }
 
+  public hasRunOutOfPatience(): boolean {
+    return this.activeVisitor !== null && this.unrepliedKnocks > MAX_UNREPLIED_KNOCKS;
+  }
+
   public updateFigure(delta: number): void {
+    if (this.talkCooldown > 0) this.talkCooldown -= delta;
     if (this.currentFigure) {
       this.currentFigure.update(delta);
     }
   }
 
-  public attemptTalk(paranoia: number, evidence: Evidence): { success: boolean; message: string } {
-    if (!this.activeVisitor) return { success: true, message: 'No visitor at door.' };
+  public attemptTalk(paranoia: number, evidence: Evidence): { outcome: TalkOutcome; message: string } {
+    if (!this.activeVisitor) return { outcome: 'success', message: 'No visitor at door.' };
+    if (this.talkCooldown > 0) return { outcome: 'fail', message: '...' };
+    this.talkCooldown = TALK_COOLDOWN;
+    // Answering the door counts as a reply.
+    this.unrepliedKnocks = 0;
 
     const suspicion = evidence.calculateSuspicion();
     const severity = evidence.getUncleanedTracesCount() / 4;
 
-    if (paranoia < 70) {
-      if (suspicion < 0.8) {
-        const msg = this.activeVisitor.dialogueSuccess;
-        this.dismissVisitor();
-        return { success: true, message: msg };
-      }
+    if (paranoia < 70 && suspicion < 0.8) {
+      const msg = this.activeVisitor.dialogueSuccess;
+      this.dismissVisitor();
+      return { outcome: 'success', message: msg };
     }
 
     const failChance = Math.min(
@@ -72,19 +91,23 @@ export class VisitorManager {
       this.activeVisitor.skepticism * (0.3 + 0.45 * severity + 0.5 * suspicion)
     );
 
-    const roll = Math.random();
-    if (roll > failChance) {
+    if (Math.random() > failChance) {
       const msg = this.activeVisitor.dialogueSuccess;
       this.dismissVisitor();
-      return { success: true, message: msg };
-    } else {
-      const msg = this.activeVisitor.dialogueFail;
-      return { success: false, message: msg };
+      return { outcome: 'success', message: msg };
     }
+
+    this.failedTalks++;
+    const msg = this.activeVisitor.dialogueFail;
+    if (this.failedTalks >= MAX_FAILED_TALKS) {
+      return { outcome: 'forced_entry', message: msg };
+    }
+    return { outcome: 'fail', message: msg };
   }
 
   public dismissVisitor(): void {
     if (this.currentFigure) {
+      this.currentFigure.root.removeFromParent();
       this.currentFigure.dispose();
     }
     this.activeVisitor = null;

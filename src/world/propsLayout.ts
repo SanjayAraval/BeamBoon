@@ -20,6 +20,7 @@ export const propsLayout: PropDef[] = [
   // LIVING ROOM
   { id: 'tv_unit', name: 'TV Unit', type: 'box', w: 0.5, d: 1.6, h: 0.5, x: 0.45, z: 8.5, floor: 0, facing: 'E', color: 0x333333 },
   { id: 'tv_screen', name: 'TV', type: 'box', w: 0.1, d: 1.2, h: 0.7, x: 0.45, z: 8.5, floor: 0, facing: 'E', color: 0x111111, interactable: 'tv', supportId: 'tv_unit', isCollider: false },
+  { id: 'curtains_living', name: 'Curtains', type: 'box', w: 0.06, d: 2.2, h: 2.4, x: 3.0, z: 11.84, floor: 0, facing: 'N', color: 0x5a1a1a, interactable: 'curtains', isCollider: false },
   { id: 'sofa', name: 'Sofa', type: 'box', w: 2.1, d: 0.9, h: 0.85, x: 3.6, z: 8.5, floor: 0, facing: 'W', color: 0x554444 },
   { id: 'coffee_rug', name: 'Rug', type: 'plane', w: 2.4, d: 1.6, h: 0, x: 2.4, z: 8.5, floor: 0, facing: 'W', color: 0x662222, isCollider: false },
   { id: 'coffee_table', name: 'Coffee Table', type: 'box', w: 1.1, d: 0.6, h: 0.45, x: 2.4, z: 8.5, floor: 0, facing: 'W', color: 0x443322 },

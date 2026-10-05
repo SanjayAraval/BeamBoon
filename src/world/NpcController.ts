@@ -339,15 +339,7 @@ export class NpcManager {
     if (this.spawnTimer > 0) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
-        this.spawnTimer = -1;
-        const father = createCharacter('father');
-        const fSpawn = npcLayout.parentEntry.fatherStart;
-        const fCtrl = new NpcController(father, this.colliders);
-        fCtrl.setPosition(fSpawn.x, fSpawn.floor === 1 ? 3.0 : 0.0, fSpawn.z, fSpawn.rotation);
-        fCtrl.drunk = true;
-        this.scene.add(father.root);
-        this.parents.push(fCtrl);
-        fCtrl.walkTo('living_room');
+        this.spawnFather();
       }
     }
     
@@ -355,6 +347,22 @@ export class NpcManager {
     for (const ctrl of this.visitors) ctrl.update(dt);
   }
   
+  private spawnFather() {
+    this.spawnTimer = -1;
+    const father = createCharacter('father');
+    const fSpawn = npcLayout.parentEntry.fatherStart;
+    const fCtrl = new NpcController(father, this.colliders);
+    fCtrl.setPosition(fSpawn.x, fSpawn.floor === 1 ? 3.0 : 0.0, fSpawn.z, fSpawn.rotation);
+    fCtrl.drunk = true;
+    this.scene.add(father.root);
+    this.parents.push(fCtrl);
+    fCtrl.walkTo('living_room');
+  }
+
+  public getParent(kind: 'mother' | 'father'): NpcController | undefined {
+    return this.parents.find(p => p.character.kind === kind);
+  }
+
   private cancelSpawns() {
     this.spawnTimer = -1;
   }
@@ -374,14 +382,14 @@ export class NpcManager {
   }
   
   killParents() {
-    if (this.parents.length >= 2) {
-      const dpM = npcLayout.deadPoses.mother;
-      this.parents[0].setDead(true);
-      this.parents[0].setPosition(dpM.x, dpM.floor === 1 ? 3.0 : 0.0, dpM.z, dpM.rotation);
-      
-      const dpF = npcLayout.deadPoses.father;
-      this.parents[1].setDead(true);
-      this.parents[1].setPosition(dpF.x, dpF.floor === 1 ? 3.0 : 0.0, dpF.z, dpF.rotation);
+    // The shot can happen before the father has walked in; spawn him now so both end up down
+    if (this.spawnTimer > 0) this.spawnFather();
+    for (const kind of ['mother', 'father'] as const) {
+      const ctrl = this.getParent(kind);
+      if (!ctrl) continue;
+      const dp = npcLayout.deadPoses[kind];
+      ctrl.setDead(true);
+      ctrl.setPosition(dp.x, dp.floor === 1 ? 3.0 : 0.0, dp.z, dp.rotation);
     }
   }
   

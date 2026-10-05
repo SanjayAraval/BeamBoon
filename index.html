@@ -13,12 +13,16 @@
   <!-- Canvas container for Three.js -->
   <div id="error-log" style="position:absolute; top:0; left:0; z-index:9999; color:red; font-size:20px; font-weight:bold; background:black; white-space:pre-wrap;"></div>
   <script>
-    window.onerror = function(msg, url, line, col, error) {
-      document.getElementById('error-log').innerText += '\n' + msg;
-    };
-    window.onunhandledrejection = function(event) {
-      document.getElementById('error-log').innerText += '\n' + event.reason;
-    };
+    (function () {
+      var isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.search.indexOf('debug=1') !== -1;
+      if (!isDev) return;
+      window.onerror = function(msg) {
+        document.getElementById('error-log').innerText += '\n' + msg;
+      };
+      window.onunhandledrejection = function(event) {
+        document.getElementById('error-log').innerText += '\n' + event.reason;
+      };
+    })();
   </script>
   <div id="game-container">
     <canvas id="webgl-canvas"></canvas>
@@ -57,10 +61,11 @@
           <div><span class="key">MOUSE</span> Look (Pointer Lock)</div>
           <div><span class="key">E</span> Interact / Hide / Clean</div>
           <div><span class="key">F</span> Toggle Flashlight</div>
-          <div><span class="key">1 / 2</span> Switch Weapon</div>
+          <div><span class="key">1 / 2 / SCROLL</span> Switch Weapon</div>
           <div><span class="key">L-CLICK</span> Attack / Shoot</div>
           <div><span class="key">T</span> Talk at Door</div>
           <div><span class="key">ESC</span> Pause Menu</div>
+          <div><span class="key">R</span> (twice) Restart</div>
         </div>
       </div>
     </div>
@@ -88,7 +93,7 @@
   </div>
 
   <!-- Settings Modal -->
-  <div id="settings-modal" class="overlay hidden">
+  <div id="settings-modal" class="overlay hidden" style="z-index: 1100;">
     <div class="comic-box settings-box">
       <h2>GAME SETTINGS</h2>
       
@@ -135,9 +140,6 @@
   <div id="objective-text" class="comic-text" style="font-size: 24px;"></div>
 </div>
 <div id="skip-hint" class="comic-text hidden" style="position: absolute; bottom: 20px; right: 20px; font-size: 18px; color: white; opacity: 0.7; z-index: 50;">Hold SPACE to skip</div>
-<div id="narrator-caption" class="narrator-caption hidden" style="position:absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 1.2rem; transition: opacity 0.5s;">
-      <div id="objective-text"></div>
-    </div>
     <!-- Paranoia Bar -->
     <div class="paranoia-container">
       <div class="paranoia-label">PARANOIA</div>
@@ -168,6 +170,7 @@
         <h3>VISITOR AT THE DOOR!</h3>
         <p id="door-visitor-desc">Someone is knocking on the front door...</p>
         <div class="door-choices">
+          <button id="btn-door-peephole" class="btn-comic-sm"><span class="key-badge">E</span> PEEPHOLE</button>
           <button id="btn-door-talk" class="btn-comic-sm"><span class="key-badge">T</span> TALK / EXCUSE</button>
           <button id="btn-door-attack" class="btn-comic-sm btn-danger hidden"><span class="key-badge">L-CLICK</span> ATTACK!</button>
         </div>
@@ -215,10 +218,14 @@
   </div>
 
   <!-- Pause Overlay -->
-  <div id="pause-overlay" class="overlay hidden" style="cursor:pointer; display:none; flex-direction:column; justify-content:center; align-items:center; z-index: 1000; background:rgba(0,0,0,0.7);">
-    <div class="comic-box" style="pointer-events: none; text-align: center;">
+  <div id="pause-overlay" class="overlay hidden" style="display:flex; flex-direction:column; justify-content:center; align-items:center; z-index: 1000; background:rgba(0,0,0,0.7);">
+    <div class="comic-box" style="text-align: center;">
       <h2>PAUSED</h2>
-      <p>Click to resume</p>
+      <div class="menu-actions">
+        <button id="btn-resume" class="btn-comic">RESUME</button>
+        <button id="btn-pause-settings" class="btn-comic btn-secondary">SETTINGS</button>
+        <button id="btn-restart" class="btn-comic btn-secondary">RESTART</button>
+      </div>
     </div>
   </div>
 

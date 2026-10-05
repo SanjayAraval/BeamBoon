@@ -61,7 +61,7 @@ const domElements: Record<string, HTMLElement> = {};
   clearTimeout: (id: any) => clearTimeout(id)
 };
 
-global.performance = { now: () => Date.now() };
+(global as any).performance = { now: () => Date.now() };
 global.KeyboardEvent = class KeyboardEvent { code: string; repeat: boolean; constructor(type: string, dict: any) { this.code = dict.code; this.repeat = dict.repeat || false; } } as any;
 console.log("--- RUNNING FLOW TEST ---");
 
@@ -180,7 +180,7 @@ gameFlow.paranoia = 98;
 gameFlow.isPowerOn = false; // Dark
 for(let i = 0; i < 20; i++) gameFlow.update(0.1, false, 0); // Advance 2s in dark
 assert("Paranoia hit 100", gameFlow.paranoia >= 100);
-assert("Triggered BREAKDOWN ending", triggeredEnding?.type === 'breakdown');
+assert("Triggered BREAKDOWN ending", (triggeredEnding as EndingData | null)?.type === 'breakdown');
 
 // 4. Test RUN ending
 gameFlow.reset();
@@ -194,7 +194,7 @@ gameFlow.advancePhase(); waitUntilPhase(GamePhase.ACT1_SHOOTING, 2);
 gameFlow.advancePhase(); waitUntilPhase(GamePhase.ACT1_POWER_BACK, 2);
 gameFlow.advancePhase(); waitUntilPhase(GamePhase.ACT2_COVERUP, 2);
 gameFlow.tryRunEnding();
-assert("Triggered RUN ending", triggeredEnding?.type === 'run');
+assert("Triggered RUN ending", (triggeredEnding as EndingData | null)?.type === 'run');
 
 console.log('Flow Test Complete: ' + pass + ' PASS, ' + fail + ' FAIL');
 if (fail > 0) process.exit(1);

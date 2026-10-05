@@ -4,14 +4,14 @@ import { House } from '../world/House';
 import { NpcManager } from '../world/NpcController';
 import { Narration } from '../story/Narration';
 import { Evidence } from '../core/Evidence';
-import { VisitorManager } from '../core/Visitor';
+import { VisitorManager, VisitorInfo } from '../core/Visitor';
 import { Endings, EndingData } from '../story/Endings';
 import { SoundManager } from '../audio/SoundManager';
 import { HUD } from '../ui/HUD';
 import { Character } from '../world/characters';
 import { ComicOverlays } from '../ui/ComicOverlays';
 import { ComicPlayer } from '../ui/ComicPlayer';
-import { houseLayout } from '../world/houseLayout';
+import { findRoom } from '../world/houseLayout';
 
 export enum GamePhase {
   TITLE,
@@ -37,7 +37,10 @@ export function getVisionMode(character: Character, paranoia: number, isLightnin
   return true;
 }
 
-const VISITORS: Record<string, any> = {
+const COVERUP_DURATION = 90; // seconds to clean up before the first knock
+const BETWEEN_VISITORS = 15; // breathing room after a visitor leaves
+
+const VISITORS: Record<string, VisitorInfo> = {
   neighbour: {
     type: 'neighbour',
     name: 'Curious Neighbor (Mr. Henderson)',
@@ -86,6 +89,10 @@ export class GameFlow {
   public paranoia: number = 0;
   public blockInput: boolean = false;
   public isPowerOn: boolean = true;
+  private visitorGoneTimer = 0;
+
+  // Fired when the parents go down, so the player always ends up holding the pistol that did it
+  public onParentsShot?: () => void;
   
   private onEndingTriggered: (ending: EndingData) => void;
   
@@ -184,8 +191,9 @@ export class GameFlow {
         if (clickToPlay) clickToPlay.classList.add('hidden');
         
         this.player.lockPointer();
-        this.player.setLocked(true);
+        this.player.setFrozen(true); // cutscene: camera is scripted
         this.player.setPosition(3.6, 1.1, 8.5); // seated on sofa
+        this.narration.triggerBeat('act1_intro');
         this.player.setYaw(Math.PI);
         this.player.setFlashlight(false);
         this.blockInput = true;
@@ -196,8 +204,8 @@ export class GameFlow {
         this.isPowerOn = true;
         this.narration.triggerBeat('act1_movie');
         
-        this.player.setLocked(false);
-        this.player.setPosition(3.6, 1.6, 6.5);
+        this.player.setFrozen(false);
+        this.player.setPosition(4.3, 1.6, 6.5); // clear of the armchair (houseLayout.spawns.player)
         this.player.setYaw(Math.PI);
         this.player.setFlashlight(true);
         
@@ -223,6 +231,7 @@ export class GameFlow {
         this.phase = GamePhase.ACT1_SHOOTING;
         this.phaseTimer = 0;
         this.npcManager.killParents();
+        if (this.onParentsShot) this.onParentsShot();
         SoundManager.getInstance().playGunshot();
         const bangOverlay = document.getElementById('bang-overlay');
         if (bangOverlay) bangOverlay.classList.remove('hidden');
@@ -243,25 +252,28 @@ export class GameFlow {
       case GamePhase.ACT1_POWER_BACK:
         this.phase = GamePhase.ACT2_COVERUP;
         this.phaseTimer = 0;
-        this.isPowerOn = false;
+        this.isPowerOn = true; // lights are switched off (setPhaseLighting) but the switches work again
         this.blockInput = false;
         this.narration.triggerBeat('act2_coverup');
         
-        this.hud.showObjective('Hide everything before they come.');
+        this.hud.showObjective('Hide the bodies, clean the blood, close the curtains, return the gun to the safe.');
         break;
       case GamePhase.ACT2_COVERUP:
         this.phase = GamePhase.VISITOR_NEIGHBOUR;
         this.phaseTimer = 0;
         this.knockTimer = 0;
-        this.visitorManager.spawnVisitor(VISITORS.neighbour as any);
+        this.visitorGoneTimer = 0;
+        this.visitorManager.spawnVisitor(VISITORS.neighbour);
         this.triggerKnock();
+        this.narration.triggerBeat('visitor_knocking');
         this.hud.showObjective('Someone is knocking.');
         break;
       case GamePhase.VISITOR_NEIGHBOUR:
         this.phase = GamePhase.VISITOR_OFFICER;
         this.phaseTimer = 0;
         this.knockTimer = 0;
-        this.visitorManager.spawnVisitor(VISITORS.officer as any);
+        this.visitorGoneTimer = 0;
+        this.visitorManager.spawnVisitor(VISITORS.officer);
         this.triggerKnock();
         this.hud.showObjective('Someone is knocking.');
         break;
@@ -269,7 +281,8 @@ export class GameFlow {
         this.phase = GamePhase.VISITOR_PARTNER;
         this.phaseTimer = 0;
         this.knockTimer = 0;
-        this.visitorManager.spawnVisitor(VISITORS.partner as any);
+        this.visitorGoneTimer = 0;
+        this.visitorManager.spawnVisitor(VISITORS.partner);
         this.triggerKnock();
         this.hud.showObjective('Someone is knocking.');
         break;
@@ -297,8 +310,9 @@ export class GameFlow {
     console.log('advancePhase: ' + GamePhase[oldPhase] + ' -> ' + GamePhase[this.phase]);
   }
 
-    private triggerKnock(): void {
+  private triggerKnock(): void {
     this.knockTimer = 0;
+    this.visitorManager.triggerKnock();
     SoundManager.getInstance().playKnock();
   }
 
@@ -447,18 +461,16 @@ export class GameFlow {
       }
     }
     
-    // Paranoia updates
+    // Paranoia updates: a lit room calms you down, the flashlight only slows the dread
+    const playerPos = this.player.getPosition();
+    const playerRoomLit = this.isLocationLit(playerPos.x, playerPos.z, this.player.getFloor());
     let paranoiaDelta = 0;
-    if (this.phase === GamePhase.ACT1_POWER_BACK) {
+    if (this.phase === GamePhase.ACT1_POWER_BACK || playerRoomLit || this.isLightning) {
       paranoiaDelta = -22 * delta;
     } else {
-      if (this.isPowerOn || flashlightOn || this.isLightning) {
-        paranoiaDelta = -22 * delta;
-      } else {
-        paranoiaDelta = 6 * delta;
-        if (this.visitorManager.isVisitorAtDoor()) {
-          paranoiaDelta = 16 * delta;
-        }
+      paranoiaDelta = (flashlightOn ? 2 : 6) * delta;
+      if (this.visitorManager.isVisitorAtDoor()) {
+        paranoiaDelta += 10 * delta;
       }
     }
     
@@ -473,9 +485,10 @@ export class GameFlow {
     this.npcManager.update(delta);
     this.visitorManager.updateFigure(delta);
     
-    const isRoomLit = this.isPowerOn; // Simplified
     for (const parent of this.npcManager.parents) {
-      parent.character.setZombie(getVisionMode(parent.character, this.paranoia, this.isLightning, isRoomLit));
+      const root = parent.character.root.position;
+      const parentRoomLit = this.isLocationLit(root.x, root.z, root.y >= 1.5 ? 1 : 0);
+      parent.character.setZombie(getVisionMode(parent.character, this.paranoia, this.isLightning, parentRoomLit));
     }
     
     const activeFigure = this.visitorManager.getCurrentFigure();
@@ -504,21 +517,13 @@ export class GameFlow {
         if (this.phaseTimer >= 25) {
           this.advancePhase();
         } else {
-          // Check if within 1.5m
+          // A parent got within 1.5m (horizontally) before the player fired: panic shot
           const targetPos = this.player.getPosition();
-          let allDown = true;
-          let hitCount = 0;
-          for (const parent of this.npcManager.parents) {
-            if (!parent.character.root.userData.isDowned) {
-              if (parent.character.root.position.distanceTo(targetPos) <= 1.5) {
-                hitCount++;
-              } else {
-                allDown = false;
-              }
-            }
-          }
-          if (hitCount > 0 && !allDown) {
-            // Player hasn't shot yet, but one is in range
+          const inRange = this.npcManager.parents.some(parent => {
+            const p = parent.character.root.position;
+            return Math.hypot(p.x - targetPos.x, p.z - targetPos.z) <= 1.5;
+          });
+          if (inRange) {
             this.advancePhase();
           }
         }
@@ -535,26 +540,63 @@ export class GameFlow {
         }
         break;
       case GamePhase.ACT2_COVERUP:
-        if (this.phaseTimer >= 8.0) {
+        if (this.phaseTimer >= COVERUP_DURATION) {
           this.advancePhase();
         }
         break;
       case GamePhase.VISITOR_NEIGHBOUR:
       case GamePhase.VISITOR_OFFICER:
-      case GamePhase.VISITOR_PARTNER:
-        this.knockTimer += delta;
-        if (this.knockTimer >= 11.0 && this.visitorManager.getActiveVisitor() !== null) {
-          this.triggerKnock();
-        }
-        
-        // When the visitor finishes/leaves
-        if (this.visitorManager.getActiveVisitor() === null && this.phaseTimer > 5.0) {
-          this.advancePhase();
+      case GamePhase.VISITOR_PARTNER: {
+        const visitor = this.visitorManager.getActiveVisitor();
+        if (visitor) {
+          this.knockTimer += delta;
+          if (this.knockTimer >= 11.0) {
+            this.triggerKnock();
+          }
+          if (this.visitorManager.hasRunOutOfPatience()) {
+            if (visitor.type === 'neighbour') {
+              this.narration.showCaption('"Hmph. Kids these days..." The footsteps faded down the porch.', 4.0);
+              this.visitorManager.dismissVisitor();
+            } else {
+              this.forceEntry();
+              return;
+            }
+          }
+        } else {
+          // Give the player some time before the next knock
+          this.visitorGoneTimer += delta;
+          if (this.visitorGoneTimer >= BETWEEN_VISITORS) {
+            this.advancePhase();
+          }
         }
         break;
+      }
     }
   }
   
+  private isLocationLit(x: number, z: number, floor: number): boolean {
+    if (!this.isPowerOn) return false;
+    const room = findRoom(x, z, floor);
+    return room !== null && this.house.lightManager.isRoomLit(room.name);
+  }
+
+  public getParentRoots(): THREE.Object3D[] {
+    return this.npcManager.parents.map(p => p.character.root);
+  }
+
+  public hideParentBody(kind: 'mother' | 'father'): void {
+    const parent = this.npcManager.getParent(kind);
+    if (parent) parent.character.root.visible = false;
+  }
+
+  // A visitor pushes inside: the house gets inspected right now
+  public forceEntry(): void {
+    if (this.phase < GamePhase.VISITOR_NEIGHBOUR || this.phase >= GamePhase.ENDING) return;
+    this.visitorManager.dismissVisitor();
+    this.phase = GamePhase.FINAL_INSPECTION;
+    this.checkEnding();
+  }
+
   public handlePlayerAttack(): void {
     if (this.phase === GamePhase.ACT1_ARRIVAL) {
       this.advancePhase(); // Transition to shooting
@@ -570,7 +612,7 @@ export class GameFlow {
       // Custom run logic
       const data = Endings.calculateEnding(this.paranoia, this.evidence);
       data.type = 'run';
-      data.title = 'THE COWARD';
+      data.title = 'ENDING: THE COWARD';
       data.story = 'You fled into the night. It is only a matter of time before they find you.';
       this.triggerEnding(data);
     }

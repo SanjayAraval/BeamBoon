@@ -36,6 +36,23 @@ export class Arsenal {
     this.equip('knife');
   }
 
+  public ownsPistol(): boolean {
+    return this.hasPistol;
+  }
+
+  public ownsKnife(): boolean {
+    return this.hasKnife;
+  }
+
+  // Put the pistol away (e.g. back in the gun safe)
+  public removePistol(): void {
+    this.hasPistol = false;
+    if (this.currentWeapon === 'pistol') {
+      this.currentWeapon = this.hasKnife ? 'knife' : 'unarmed';
+      this.updateWeaponVisual();
+    }
+  }
+
   public equip(type: WeaponType): void {
     if (type === 'pistol' && !this.hasPistol) return;
     if (type === 'knife' && !this.hasKnife) return;

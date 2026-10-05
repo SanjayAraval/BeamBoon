@@ -9,7 +9,8 @@ export const HalftoneShader = {
     uGrainAmount: { value: 0.12 },
     uContrast: { value: 1.3 },
     uTime: { value: 0.0 },
-    uQuality: { value: 1.0 } // 1.0 = High, 0.5 = Low
+    uQuality: { value: 1.0 }, // 1.0 = High, 0.5 = Low
+    uBrightness: { value: 1.0 }
   },
 
   vertexShader: /* glsl */ `
@@ -28,6 +29,7 @@ export const HalftoneShader = {
     uniform float uContrast;
     uniform float uTime;
     uniform float uQuality;
+    uniform float uBrightness;
 
     varying vec2 vUv;
 
@@ -61,6 +63,7 @@ export const HalftoneShader = {
 
     void main() {
       vec4 texColor = texture2D(tDiffuse, vUv);
+      texColor.rgb *= uBrightness;
       float lum = getLuminance(texColor.rgb);
 
       // Smooth contrast curve for noir effect without crushing ambient shadow details

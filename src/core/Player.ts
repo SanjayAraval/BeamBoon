@@ -18,7 +18,9 @@ export class Player {
   private moveLeft = false;
   private moveRight = false;
 
+  // isLocked mirrors pointer lock; frozen is set by game logic (cutscenes, peephole)
   private isLocked = false;
+  private frozen = false;
   private mouseSensitivity = 0.002;
   private enableHeadBob = true;
 
@@ -62,8 +64,16 @@ export class Player {
     this.isLocked = locked;
   }
 
+  public setFrozen(frozen: boolean): void {
+    this.frozen = frozen;
+    if (frozen) {
+      this.moveForward = this.moveBackward = this.moveLeft = this.moveRight = false;
+    }
+  }
+
   private onKeyDown = (e: KeyboardEvent): void => {
-    if (!this.isLocked) return;
+    if (e.code === 'Space') this.skipHold = true;
+    if (!this.isLocked || this.frozen) return;
     switch (e.code) {
       case 'KeyW': this.moveForward = true; break;
       case 'KeyS': this.moveBackward = true; break;
@@ -83,6 +93,7 @@ export class Player {
 
   private onKeyUp = (e: KeyboardEvent): void => {
     switch (e.code) {
+      case 'Space': this.skipHold = false; break;
       case 'KeyW': this.moveForward = false; break;
       case 'KeyS': this.moveBackward = false; break;
       case 'KeyA': this.moveLeft = false; break;
@@ -91,7 +102,7 @@ export class Player {
   };
 
   private onMouseMove = (e: MouseEvent): void => {
-    if (!this.isLocked) return;
+    if (!this.isLocked || this.frozen) return;
 
     if (document.pointerLockElement !== null) {
       this.yaw -= e.movementX * this.mouseSensitivity;
@@ -147,7 +158,7 @@ export class Player {
   }
 
   public update(delta: number, paranoia: number, onFootstep: () => void): void {
-    if (!this.isLocked) return;
+    if (!this.isLocked || this.frozen) return;
 
     const speed = 3.5;
     const moveDir = new THREE.Vector3();

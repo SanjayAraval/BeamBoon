@@ -89,6 +89,13 @@ export class PostProcessing {
     this.renderer.render(this.postScene, this.postCamera);
   }
 
+  // Brightness setting: scales the post shader input, and the exposure of the direct (low quality) path
+  public setBrightness(value: number): void {
+    this.postMaterial.uniforms['uBrightness'].value = value;
+    this.renderer.toneMapping = THREE.LinearToneMapping;
+    this.renderer.toneMappingExposure = value;
+  }
+
   public setCamera(camera: THREE.Camera): void {
     this.camera = camera;
   }
