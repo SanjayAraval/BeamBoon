@@ -22,7 +22,7 @@ export interface DialogueRound {
 // --- Balance -------------------------------------------------------------------------------
 export const DIALOGUE_ROUNDS = 3;
 export const DOUBT_START_BASE = 10;
-export const DOUBT_START_SEVERITY = 35;   // x evidence severity (0..1)
+export const DOUBT_START_SEVERITY = 40;   // x evidence severity (0..1)
 export const DOUBT_START_SUSPICION = 30;  // x evidence suspicion (0..1)
 export const DOUBT_START_MAX = 70;
 export const DOUBT_START_MAX_HIGH_SEVERITY = 80; // cap when evidence severity is above HIGH_SEVERITY
@@ -115,7 +115,7 @@ export function startingDoubtCap(severity: number): number {
   return severity > HIGH_SEVERITY ? DOUBT_START_MAX_HIGH_SEVERITY : DOUBT_START_MAX;
 }
 
-// Note: the formula itself tops out at 10 + 35 + 30 = 75, so in play the highest start is 75
+// The formula tops out at 10 + 40 + 30 = 80, which is the high-severity cap
 export function startingDoubt(severity: number, suspicion: number): number {
   return clamp(DOUBT_START_BASE + DOUBT_START_SEVERITY * severity + DOUBT_START_SUSPICION * suspicion, 0, startingDoubtCap(severity));
 }

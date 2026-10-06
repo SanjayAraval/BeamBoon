@@ -23,13 +23,13 @@ const VISITORS: VisitorType[] = ['neighbour', 'officer', 'partner'];
 console.log('--- RUNNING DIALOGUE TEST ---');
 
 // 1. Starting doubt from the real evidence values --------------------------------------------
-check('Starting doubt: 10 + 35*severity + 30*suspicion', near(startingDoubt(0, 0), 10) && near(startingDoubt(0.5, 0.2), 33.5) && near(startingDoubt(0.2, 0.5), 32));
+check('Starting doubt: 10 + 40*severity + 30*suspicion', near(startingDoubt(0, 0), 10) && near(startingDoubt(0.5, 0.2), 36) && near(startingDoubt(0.2, 0.5), 33));
 check(`Cap: ${DOUBT_START_MAX} up to 50% severity, ${DOUBT_START_MAX_HIGH_SEVERITY} above`, startingDoubtCap(0) === DOUBT_START_MAX && startingDoubtCap(0.5) === DOUBT_START_MAX && startingDoubtCap(0.51) === DOUBT_START_MAX_HIGH_SEVERITY && startingDoubtCap(1) === DOUBT_START_MAX_HIGH_SEVERITY);
-check('Starting doubt never exceeds its cap (formula max is 75)', near(startingDoubt(1, 1), 75) && near(startingDoubt(0.5, 1), 57.5) && startingDoubt(0, 0) >= 0);
+check('High severity can reach the 80 cap; at 50% severity the max is 60', near(startingDoubt(1, 1), 80) && near(startingDoubt(0.5, 1), 60) && startingDoubt(0, 0) >= 0);
 {
   const messy = new Evidence(); // both bodies out, blood, curtains open, gun out
   const s = messy.getVisibleSeverity() / 100;
-  check('Messy house (severity 1, suspicion 1): starts at 75 (was 70)', near(startingDoubt(s, messy.calculateSuspicion()), 75));
+  check('Messy house (severity 1, suspicion 1): starts at 80', near(startingDoubt(s, messy.calculateSuspicion()), 80));
   const tidy = new Evidence();
   for (const b of tidy.getBodies()) tidy.hideBody(b.id);
   for (const t of tidy.getBloodTraces()) tidy.cleanBloodTrace(t.id);
@@ -96,7 +96,7 @@ check('Starting doubt never exceeds its cap (formula max is 75)', near(startingD
   check(`Starting at the ${DOUBT_START_MAX_HIGH_SEVERITY} cap while nervous, perfect answers still pass (${atCap.join(', ')})`, atCapOk);
   check('Worst answers always fail (all visitors, evidence 0-1, paranoia 0-100)', worstOk, cases.join('; '));
 
-  const early = new DialogueSession('officer', 1, 1); // starts at 75
+  const early = new DialogueSession('officer', 1, 1); // starts at 80
   const r = early.answer(worstAnswer(early.current!), 80); // +30 +5 nervous
   check(`Doubt reaching ${DOUBT_FAIL} ends the talk at once (FAIL)`, early.doubt === DOUBT_FAIL && early.finished && early.success === false && r!.finished && early.round === 1);
   check('No more answers after it ends', early.answer(0, 50) === null && early.current === null);
