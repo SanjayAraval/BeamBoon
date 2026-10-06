@@ -350,7 +350,8 @@ export class GameFlow {
         const clickToPlay = document.getElementById('click-to-play');
         if (clickToPlay) clickToPlay.classList.add('hidden');
         
-        this.player.lockPointer();
+        // No pointer lock here: this runs when the comic ends, outside any click, and the browser
+        // would refuse it. Game shows "Click to continue" and locks on that click.
         this.player.setFrozen(true); // cutscene: camera is scripted
         this.player.setPosition(3.6, 1.1, 8.5); // seated on sofa
         this.narration.triggerBeat('act1_intro');

@@ -53,6 +53,7 @@ function newGame(seed: number, toCoverUp = true): Driver {
   d.clickButton('btn-start');
   d.holdKey('Enter', 1.2);
   d.runUntil(() => d.phase === GamePhase.ACT1_INTRO, 3);
+  d.clickButton('btn-resume'); // "Click to continue" after the comic
   if (toCoverUp) {
     d.holdKey('Space', 1.2);
     d.runUntil(() => d.phase === GamePhase.ACT2_COVERUP, 70);

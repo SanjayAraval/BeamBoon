@@ -52,15 +52,16 @@ pressKey('Escape');
 check('Esc again closes the pause menu and resumes the comic', !d.flow.isPaused && isHidden('pause-overlay') && comic.paused === false);
 pressKey('Escape');
 d.clickButton('btn-resume');
-check('Resume button resumes the comic without grabbing the pointer', !d.flow.isPaused && comic.paused === false && !d.player.isLocked);
+check('Resume button resumes the comic without grabbing the pointer', !d.flow.isPaused && comic.paused === false && !d.player.isLocked());
 d.run(6.0);
 check('Comic plays on after resume', comic.beat > beat);
 
 d.holdKey('Enter', 1.2);
 d.runUntil(() => d.phase === GamePhase.ACT1_INTRO, 3);
+d.clickButton('btn-resume'); // "Click to continue" after the comic
 d.holdKey('Space', 1.2);
 d.run(1.0);
-check('Reached free roam (ACT1_MOVIE) with pointer lock', d.phase === GamePhase.ACT1_MOVIE && d.player.isLocked);
+check('Reached free roam (ACT1_MOVIE) with pointer lock', d.phase === GamePhase.ACT1_MOVIE && d.player.isLocked());
 
 d.run(2.0);
 const clockBefore = game.getGameTime();
@@ -91,7 +92,7 @@ check('Flashlight key is ignored while paused', d.flashlight.isTurnedOn() === fl
 // The tab was hidden for a minute: no frames rendered, but wall time moved on
 simClock.advance(60);
 d.clickButton('btn-resume');
-check('Resume button re-locks the pointer and unpauses', !d.flow.isPaused && d.player.isLocked);
+check('Resume button re-locks the pointer and unpauses', !d.flow.isPaused && d.player.isLocked());
 check('Pause menu is hidden after resume', !pauseMenu.isVisible() && isHidden('pause-overlay'));
 d.settle();
 check('Time spent paused is not fed into the first frame back', game.getGameTime() === clockBefore, `jumped ${game.getGameTime() - clockBefore}s`);
@@ -128,6 +129,7 @@ const d2 = new Driver();
 d2.clickButton('btn-start');
 d2.holdKey('Enter', 1.2);
 d2.runUntil(() => d2.phase === GamePhase.ACT1_INTRO, 3);
+d2.clickButton('btn-resume');
 d2.holdKey('Space', 1.2);
 d2.run(1.0);
 losePointerLock();

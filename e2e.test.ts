@@ -6,7 +6,7 @@
 // scripted shortcut is locomotion: the player is placed next to what they want to use instead
 // of walking there with WASD. One playthrough per ending: CLEAN, CAUGHT, RUN, BREAKDOWN.
 
-import { resetHeadless, isHidden, elementText, comicRoot, simClock, losePointerLock } from './test-support/headless';
+import { resetHeadless, isHidden, elementText, comicRoot, simClock, losePointerLock, pointerLockStats } from './test-support/headless';
 import { SoundManager } from './src/audio/SoundManager';
 import { Driver } from './test-support/driver';
 import * as THREE from 'three';
@@ -63,7 +63,11 @@ function startGame(d: Driver): void {
   d.holdKey('Enter', 1.2);
   check('Holding Enter skips the comic into the intro', d.runUntil(() => d.phase === GamePhase.ACT1_INTRO, 3), d.phaseName);
   check('The comic is removed from the page', comicRoot() === null);
-  check('Intro grabs pointer lock', d.player.isLocked === true);
+  check('The comic ending does not request pointer lock (no user gesture)', pointerLockStats.requests === 0);
+  d.settle(); // next frame: gameplay without a locked pointer pauses
+  check('The intro waits behind "Click to continue"', d.flow.isPaused && !isHidden('pause-overlay') && !d.player.isLocked());
+  d.clickButton('btn-resume');
+  check('That click locks the pointer and the intro plays', d.player.isLocked() && !d.flow.isPaused && isHidden('pause-overlay'));
   d.holdKey('Space', 1.2);
   d.run(1.0);
   check('Holding Space skips the intro; player is free to move', d.phase === GamePhase.ACT1_MOVIE, d.phaseName);
@@ -106,6 +110,7 @@ function waitForKnock(d: Driver, maxSeconds: number): boolean {
 }
 
 function checkEndingScreen(d: Driver, ending: () => EndingType | null, expected: EndingType): void {
+  check('Pointer lock was only ever requested from a click or key press', pointerLockStats.outsideGesture === 0, `${pointerLockStats.outsideGesture} refused`);
   check(`Ending is ${expected.toUpperCase()}`, ending() === expected, `got ${ending()}`);
   check('Game is in the ENDING phase', d.phase === GamePhase.ENDING, d.phaseName);
   check('Ending screen is shown with the right title', !isHidden('ending-screen') && elementText('ending-title') === ENDING_TITLES[expected], elementText('ending-title'));

@@ -24,6 +24,12 @@ export class PauseMenu {
     if (btnResume) {
       btnResume.onclick = () => this.onResumeCallback();
     }
+    // A click on the dark backdrop (outside the menu box) also continues
+    if (this.pauseElement) {
+      this.pauseElement.addEventListener('click', (e) => {
+        if (this.visible && e.target === this.pauseElement) this.onResumeCallback();
+      });
+    }
 
     if (btnRestart) {
       btnRestart.onclick = () => this.onRestartCallback();

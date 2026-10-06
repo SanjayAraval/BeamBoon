@@ -153,11 +153,34 @@ export class FakeElement extends FakeEventTarget {
   blur() {}
   getContext() { return fakeContext2D(); }
   click() { this.dispatchEvent({ type: 'click', target: this }); }
-  requestPointerLock() {
-    // The browser grants the lock and fires pointerlockchange on the document
+  // Like Chrome: granted only inside a user gesture (click / key handler), otherwise refused with
+  // 'pointerlockerror' and a rejected promise. pointerLockStats.rejectNext simulates the refusal
+  // a browser gives for about a second after Esc.
+  requestPointerLock(): Promise<void> {
+    pointerLockStats.requests++;
+    const outsideGesture = gestureDepth === 0;
+    if (outsideGesture || pointerLockStats.rejectNext > 0) {
+      if (outsideGesture) pointerLockStats.outsideGesture++;
+      else pointerLockStats.rejectNext--;
+      pointerLockStats.rejected++;
+      doc.dispatchEvent({ type: 'pointerlockerror' });
+      const err = new Error('A user gesture is required to request Pointer Lock');
+      err.name = 'NotAllowedError';
+      return Promise.reject(err);
+    }
     doc.pointerLockElement = this;
     doc.dispatchEvent({ type: 'pointerlockchange' });
+    return Promise.resolve();
   }
+}
+
+// Pointer lock bookkeeping for tests
+export const pointerLockStats = { requests: 0, rejected: 0, outsideGesture: 0, rejectNext: 0 };
+let gestureDepth = 0;
+// Run an input dispatch as a user gesture (inside it, pointer lock may be requested)
+function asGesture(fn: () => void): void {
+  gestureDepth++;
+  try { fn(); } finally { gestureDepth--; }
 }
 
 class FakeDocument extends FakeEventTarget {
@@ -344,6 +367,7 @@ export function resetHeadless(): void {
   seedDom();
   simClock.reset();
   reloads.count = 0;
+  Object.assign(pointerLockStats, { requests: 0, rejected: 0, outsideGesture: 0, rejectNext: 0 });
 }
 
 export function windowListenerCount(): number {
@@ -353,22 +377,24 @@ export function windowListenerCount(): number {
 // --- Input helpers ------------------------------------------------------------------
 
 export function keyDown(code: string, repeat = false): void {
-  win.dispatchEvent({ type: 'keydown', code, repeat });
+  asGesture(() => win.dispatchEvent({ type: 'keydown', code, repeat }));
 }
 export function keyUp(code: string): void {
-  win.dispatchEvent({ type: 'keyup', code });
+  asGesture(() => win.dispatchEvent({ type: 'keyup', code }));
 }
 export function pressKey(code: string): void {
   keyDown(code);
   keyUp(code);
 }
 export function mouseDown(button = 0): void {
-  win.dispatchEvent({ type: 'mousedown', button });
-  win.dispatchEvent({ type: 'mouseup', button });
+  asGesture(() => {
+    win.dispatchEvent({ type: 'mousedown', button });
+    win.dispatchEvent({ type: 'mouseup', button });
+  });
 }
 // A click on a page element (e.g. the comic) rather than the locked game canvas
 export function mouseDownOn(el: FakeElement, button = 0): void {
-  el.dispatchEvent({ type: 'mousedown', button, target: el });
+  asGesture(() => el.dispatchEvent({ type: 'mousedown', button, target: el }));
 }
 export function mouseMove(movementX: number, movementY: number): void {
   win.dispatchEvent({ type: 'mousemove', movementX, movementY, clientX: 0, clientY: 0 });
@@ -376,7 +402,7 @@ export function mouseMove(movementX: number, movementY: number): void {
 export function clickElement(id: string): void {
   const el = doc.getElementById(id);
   if (!el) throw new Error(`No element #${id}`);
-  el.click();
+  asGesture(() => el.click());
 }
 // The player presses Esc / alt-tabs: the browser drops pointer lock
 export function losePointerLock(): void {

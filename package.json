@@ -16,8 +16,9 @@
     "test:doors": "tsx doors.test.ts",
     "test:e2e": "tsx e2e.test.ts",
     "test:shadows": "tsx shadows.test.ts",
+    "test:pointerlock": "tsx pointerlock.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
-    "test": "npm run typecheck && npm run test:walk && npm run test:npc && npm run test:peephole && npm run test:interact && npm run test:doors && npm run test:flow && npm run test:pause && npm run test:shadows && npm run test:e2e"
+    "test": "npm run typecheck && npm run test:walk && npm run test:npc && npm run test:peephole && npm run test:interact && npm run test:doors && npm run test:flow && npm run test:pause && npm run test:shadows && npm run test:pointerlock && npm run test:e2e"
   },
   "dependencies": {
     "three": "^0.160.0"

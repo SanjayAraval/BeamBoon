@@ -428,6 +428,12 @@ html, body {
   100% { transform: scale(1.0); opacity: 0; }
 }
 
+.pause-hint {
+  font-family: 'Special Elite', monospace;
+  margin: 4px 0 12px;
+  opacity: 0.85;
+}
+
 /* Cover-up checklist */
 .task-list {
   position: absolute;

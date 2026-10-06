@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { tryLockPointer } from './pointerLock';
 
 export class Player {
   private camera: THREE.PerspectiveCamera;
@@ -19,7 +20,7 @@ export class Player {
   private moveRight = false;
 
   // isLocked mirrors pointer lock; frozen is set by game logic (cutscenes, peephole)
-  private isLocked = false;
+  private locked = false;
   private frozen = false;
   private mouseSensitivity = 0.002;
   private enableHeadBob = true;
@@ -55,13 +56,17 @@ export class Player {
     this.colliders = colliders;
   }
 
+  // Only from a click or key handler: browsers refuse pointer lock without a user gesture
   public lockPointer(): void {
-    const canvas = document.getElementById('webgl-canvas');
-    if (canvas) canvas.requestPointerLock();
+    tryLockPointer(document.getElementById('webgl-canvas'));
   }
 
   public setLocked(locked: boolean): void {
-    this.isLocked = locked;
+    this.locked = locked;
+  }
+
+  public isLocked(): boolean {
+    return this.locked;
   }
 
   public setFrozen(frozen: boolean): void {
@@ -73,7 +78,7 @@ export class Player {
 
   private onKeyDown = (e: KeyboardEvent): void => {
     if (e.code === 'Space') this.skipHold = true;
-    if (!this.isLocked || this.frozen) return;
+    if (!this.locked || this.frozen) return;
     switch (e.code) {
       case 'KeyW': this.moveForward = true; break;
       case 'KeyS': this.moveBackward = true; break;
@@ -102,7 +107,7 @@ export class Player {
   };
 
   private onMouseMove = (e: MouseEvent): void => {
-    if (!this.isLocked || this.frozen) return;
+    if (!this.locked || this.frozen) return;
 
     if (document.pointerLockElement !== null) {
       this.yaw -= e.movementX * this.mouseSensitivity;
@@ -158,7 +163,7 @@ export class Player {
   }
 
   public update(delta: number, paranoia: number, onFootstep: () => void): void {
-    if (!this.isLocked || this.frozen) return;
+    if (!this.locked || this.frozen) return;
 
     const speed = 3.5;
     const moveDir = new THREE.Vector3();

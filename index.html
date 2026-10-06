@@ -16,11 +16,17 @@
     (function () {
       var isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.search.indexOf('debug=1') !== -1;
       if (!isDev) return;
-      window.onerror = function(msg) {
+      // Pointer lock refusals (no user gesture, or too soon after Esc) are expected: the game
+      // shows "Click to continue" and retries. Never show them to the player.
+      var ignored = /pointer ?lock/i;
+      window.onerror = function(msg, src, line, col, err) {
+        if (ignored.test(String(msg)) || (err && ignored.test(String(err.message)))) return true;
         document.getElementById('error-log').innerText += '\n' + msg;
       };
       window.onunhandledrejection = function(event) {
-        document.getElementById('error-log').innerText += '\n' + event.reason;
+        var reason = event.reason;
+        if (reason && ignored.test(String(reason.message || reason))) { if (event.preventDefault) event.preventDefault(); return; }
+        document.getElementById('error-log').innerText += '\n' + reason;
       };
     })();
   </script>
@@ -216,6 +222,7 @@
   <div id="pause-overlay" class="overlay hidden" style="display:flex; flex-direction:column; justify-content:center; align-items:center; z-index: 10000; background:rgba(0,0,0,0.7);">
     <div class="comic-box" style="text-align: center;">
       <h2>PAUSED</h2>
+      <p class="pause-hint">Click to continue</p>
       <div class="menu-actions">
         <button id="btn-resume" class="btn-comic">RESUME</button>
         <button id="btn-pause-settings" class="btn-comic btn-secondary">SETTINGS</button>

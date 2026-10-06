@@ -816,6 +816,7 @@ export class Game {
       this.renderer?.setSize(window.innerWidth, window.innerHeight);
     });
 
+    // Pointer lock is only ever requested from these click handlers (and the pause menu's Resume)
     const clickToPlay = document.getElementById('click-to-play');
     if (clickToPlay) {
       clickToPlay.addEventListener('click', () => {
@@ -836,8 +837,8 @@ export class Game {
     });
 
     document.addEventListener('pointerlockerror', () => {
-      // Pointer lock needs a user gesture; the pause menu's Resume button provides one
-      if (this.isInGame()) this.pause();
+      // Refused (no gesture, or too soon after Esc): stay behind "Click to continue" and retry on the next click
+      if (this.isInGame() && !this.gameFlow.isPaused) this.pause();
     });
 
     window.addEventListener('keydown', (e) => {
@@ -1078,6 +1079,10 @@ export class Game {
 
   // One frame: advance the game clock (frozen while paused) and render
   public step(): void {
+    // Gameplay needs the pointer. If it isn't locked (after the comic or a refused request),
+    // pause behind "Click to continue" and lock on the next click.
+    if (this.isInGame() && !this.gameFlow.isPaused && !this.player.isLocked()) this.pause();
+
     const realDelta = Math.min(this.clock.getDelta(), MAX_FRAME_DELTA);
     const delta = this.gameFlow.isPaused ? 0 : realDelta;
     if (!this.gameFlow.isPaused) {
