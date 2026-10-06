@@ -476,6 +476,63 @@ html, body {
   text-decoration: line-through;
 }
 
+/* Visitor dialogue */
+.dialogue-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9500; /* below the pause overlay */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 60px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.dialogue-overlay.hidden {
+  display: none;
+}
+.dialogue-box {
+  width: min(760px, 92vw);
+  background: #0a0a0f;
+  box-shadow: 6px 6px 0px var(--comic-red);
+}
+.doubt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Bangers', cursive;
+  letter-spacing: 1px;
+}
+.doubt-bar {
+  flex: 1;
+  height: 14px;
+  border: 2px solid #f2ecdc;
+  background: #222;
+}
+.doubt-fill {
+  height: 100%;
+  width: 0;
+  background: #ffd400;
+  transition: width 0.3s ease;
+}
+.dialogue-reply {
+  font-family: 'Special Elite', monospace;
+  font-style: italic;
+  opacity: 0.8;
+  min-height: 1.2em;
+}
+.dialogue-line {
+  font-family: 'Special Elite', monospace;
+  font-size: 1.1rem;
+}
+.dialogue-answers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dialogue-answers button {
+  text-align: left;
+}
+
 /* Hiding in the closet */
 .hide-overlay {
   position: absolute;

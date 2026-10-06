@@ -143,6 +143,7 @@ export class GameFlow {
 
   // Cover-up mechanics
   public playerHidden = false;     // inside the closet
+  public inDialogue = false;       // talking with the visitor at the door
   public carryingSheet = false;
   private nobodyHomeTimer = -1;    // a knock went unanswered while hidden: the visitor leaves when this runs out
   private searcher: NpcController | null = null;
@@ -190,6 +191,7 @@ export class GameFlow {
     this.nextPhasePending = false;
     this.disposeComic(); // Play Again: the comic plays again from the start
     this.playerHidden = false;
+    this.inDialogue = false;
     this.carryingSheet = false;
     this.hasFlashlight = false;
     this.hasGun = false;
@@ -718,7 +720,7 @@ export class GameFlow {
     } else {
       const act2 = this.phase >= GamePhase.ACT2_COVERUP;
       this.gainCapped((flashlightOn ? 2 : 6) * delta, flashlightOn ? 'darkness (flashlight on)' : 'darkness', act2 ? ACT2_DARKNESS_CEILING : 100);
-      if (this.visitorManager.isVisitorAtDoor()) {
+      if (this.visitorManager.isVisitorAtDoor() && !this.inDialogue) {
         this.gainCapped(10 * delta, 'visitor at the door', act2 ? ACT2_AMBIENT_CEILING : 100);
       }
     }
@@ -837,7 +839,10 @@ export class GameFlow {
           break;
         }
         const visitor = this.visitorManager.getActiveVisitor();
-        if (visitor && this.nobodyHomeTimer >= 0) {
+        if (visitor && this.inDialogue) {
+          // The door is open and they are talking: no knocking, no patience running out
+          this.knockTimer = 0;
+        } else if (visitor && this.nobodyHomeTimer >= 0) {
           // No answer while hiding: the visitor stops knocking and gives up after a while
           this.nobodyHomeTimer -= delta;
           if (this.nobodyHomeTimer <= 0) {

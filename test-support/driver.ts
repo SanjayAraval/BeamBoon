@@ -6,6 +6,7 @@ import { simClock, keyDown, keyUp, pressKey, mouseDown, mouseMove, clickElement 
 import { Game } from '../src/game/Game';
 import { GameFlow, GamePhase } from '../src/game/GameFlow';
 import { findRoom } from '../src/world/houseLayout';
+import { bestAnswer, worstAnswer } from '../src/game/VisitorDialogue';
 
 export const FRAME = 1 / 30;
 
@@ -171,6 +172,26 @@ export class Driver {
     this.run(0.5);
     if (exitWith === 'right') this.click(2); else this.press(exitWith);
     return { entered, exited: entered && !pm.isActive() };
+  }
+
+  // Talk to the visitor at the door: T opens the dialogue, 1 / 2 / 3 answer each round ('best' and
+  // 'worst' pick by answer quality, or give the indices). Waits for the last line, then clicks
+  // through "Click to continue". Deterministic: the dialogue has no randomness.
+  talk(plan: 'best' | 'worst' | number[]): { opened: boolean; success: boolean | null; doubt: number } {
+    this.press('KeyT');
+    const session = (this.game as any).dialogue;
+    if (!session) return { opened: false, success: null, doubt: 0 };
+    for (let r = 0; r < 3 && !session.finished; r++) {
+      const round = session.current;
+      const pick = plan === 'best' ? bestAnswer(round) : plan === 'worst' ? worstAnswer(round) : plan[r];
+      this.press(`Digit${pick + 1}`);
+      this.run(0.3);
+    }
+    const result = { opened: true, success: session.success as boolean | null, doubt: session.doubt as number };
+    this.runUntil(() => !(this.game as any).dialogue, 4);
+    this.settle();
+    if (this.flow.isPaused) this.clickButton('btn-resume'); // "Click to continue"
+    return result;
   }
 
   setFlashlight(on: boolean): void {

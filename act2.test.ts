@@ -115,7 +115,7 @@ for (const [mode, seed] of [['idle', 31], ['walking', 32], ['idle, flashlight of
     check(`${name}: and Q closes it`, !pm.isActive());
     d.placePlayer(7.4, 10.6, 0);
     d.run(1);
-    d.press('KeyT');
+    d.talk('best');
     check(`${name}: talked the visitor away`, !d.flow.getVisitorManager().isVisitorAtDoor());
   }
 }

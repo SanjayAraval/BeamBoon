@@ -22,6 +22,8 @@ import { Textures } from '../world/Textures';
 import { npcLayout } from '../world/npcLayout';
 import { lightsLayout } from '../world/lightsLayout';
 import { ParanoiaShadows, ShadowFrame } from './ParanoiaShadows';
+import { DialogueSession, VisitorType } from './VisitorDialogue';
+import { DialogueUI } from '../ui/DialogueUI';
 
 const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).get('debug') === '1';
 const FRONT_DOOR = new THREE.Vector3(7.4, 0, 12.0);
@@ -80,6 +82,9 @@ export class Game {
   private bedSheets = new Map<string, THREE.Mesh>();   // white top layer on each bed, hidden once taken
   private bodySheets = new Map<string, THREE.Group>(); // sheet draped over a body
   private shadows!: ParanoiaShadows;
+  private dialogueUI!: DialogueUI;
+  private dialogue: DialogueSession | null = null;
+  private dialogueCloseTimer = -1; // game clock: the last line stays up briefly before the outcome
   private hideFadeTimer = -1;
   private hideFadeAction: (() => void) | null = null;
   private preHide: { x: number; y: number; z: number; yaw: number; pitch: number } | null = null;
@@ -139,9 +144,9 @@ export class Game {
 
     this.pauseMenu = new PauseMenu(
       () => {
-        // The comic is played with a free cursor: resume directly. In game, re-lock the pointer;
-        // unpausing then happens in the pointerlockchange handler.
-        if (this.gameFlow.phase === GamePhase.MONTAGE) this.resume();
+        // The comic and the door dialogue are played with a free cursor: resume directly. In game,
+        // re-lock the pointer; unpausing then happens in the pointerlockchange handler.
+        if (this.gameFlow.phase === GamePhase.MONTAGE || this.dialogue) this.resume();
         else this.player.lockPointer();
       },
       () => location.reload()
@@ -164,6 +169,7 @@ export class Game {
       (ending) => this.triggerEnding(ending)
     );
     this.gameFlow.onReset = () => this.resetCoverUpVisuals();
+    this.dialogueUI = new DialogueUI((i) => this.chooseAnswer(i));
     this.shadows = new ParanoiaShadows({
       scene: this.scene,
       colliders: this.house.collisionBoxes,
@@ -623,6 +629,7 @@ export class Game {
 
   // Play Again: beds made, sheets gone, out of the closet
   private resetCoverUpVisuals(): void {
+    this.closeDialogue();
     this.shadows?.clear();
     this.resetFlashlightDrawer();
     for (const [bedId, sheet] of this.bedSheets) {
@@ -647,7 +654,7 @@ export class Game {
   private shadowsAllowed(): boolean {
     const p = this.gameFlow.phase;
     const afterShooting = p >= GamePhase.ACT1_POWER_BACK && p <= GamePhase.VISITOR_PARTNER;
-    return afterShooting && !this.gameFlow.isPaused && !this.gameFlow.blockInput && !this.peepholeManager.isActive() &&
+    return afterShooting && !this.dialogue && !this.gameFlow.isPaused && !this.gameFlow.blockInput && !this.peepholeManager.isActive() &&
       !this.gameFlow.playerHidden && this.hideFadeTimer <= 0;
   }
 
@@ -700,14 +707,62 @@ export class Game {
   }
 
   private talkToVisitor(): void {
+    if (this.dialogue) return;
     const vm = this.gameFlow.getVisitorManager();
-    if (!vm.getActiveVisitor()) return;
+    const visitor = vm.getActiveVisitor();
+    if (!visitor) return;
     if (!this.isNearFrontDoor()) {
       this.hud.flashInteractionPrompt('Go to the front door to answer');
       return;
     }
-    const result = vm.attemptTalk(this.gameFlow.paranoia, this.evidence);
-    this.narration.showCaption(result.message, 4.0);
+    if (!vm.beginTalk()) return;
+    this.openDialogue(visitor.type);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Visitor dialogue
+  // ---------------------------------------------------------------------------
+
+  private openDialogue(type: VisitorType): void {
+    this.dialogue = new DialogueSession(type, this.evidence.getVisibleSeverity() / 100, this.evidence.calculateSuspicion());
+    this.dialogueCloseTimer = -1;
+    this.gameFlow.inDialogue = true;
+    this.shadows.clear();
+    this.player.setFrozen(true);
+    this.interactionSystem.setEnabled(false);
+    this.hud.hideDoorPrompt();
+    this.dialogueUI.show(this.dialogue.name);
+    this.dialogueUI.setDoubt(this.dialogue.doubt);
+    const round = this.dialogue.current!;
+    this.dialogueUI.setQuestion(round.question, round.answers.map(a => a.text));
+    // Free the cursor for the answer buttons (re-locked later only by a click)
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  private chooseAnswer(index: number): void {
+    const session = this.dialogue;
+    if (!session || session.finished || this.gameFlow.isPaused) return;
+    const result = session.answer(index, this.gameFlow.paranoia);
+    if (!result) return;
+    if (result.paranoiaChange !== 0) this.gameFlow.addParanoia(result.paranoiaChange, 'dialogue');
+    this.dialogueUI.setDoubt(session.doubt);
+    this.dialogueUI.setReply(`"${result.reply}"`);
+    if (result.finished) {
+      const visitor = this.gameFlow.getVisitorManager().getActiveVisitor();
+      this.dialogueUI.setFinal(visitor ? (result.success ? visitor.dialogueSuccess : visitor.dialogueFail) : '');
+      this.dialogueCloseTimer = 2.5;
+    } else {
+      const round = session.current!;
+      this.dialogueUI.setQuestion(round.question, round.answers.map(a => a.text));
+    }
+  }
+
+  // Close the box and apply the verdict through the old outcome branches
+  private finishDialogue(): void {
+    const success = this.dialogue?.success ?? false;
+    this.closeDialogue();
+    const result = this.gameFlow.getVisitorManager().resolveTalk(success);
+    if (result.message) this.narration.showCaption(result.message, 4.0);
     if (result.outcome === 'forced_entry') {
       this.hud.hideDoorPrompt();
       ComicOverlays.popOnomatopoeia('BAM! BAM!', 50, 40);
@@ -715,6 +770,36 @@ export class Game {
     } else if (result.outcome === 'success') {
       this.hud.hideDoorPrompt();
     }
+  }
+
+  // Close without a verdict (ending, reset, the visitor is gone). After any close the pointer is
+  // free, so gameplay waits behind "Click to continue".
+  private closeDialogue(): void {
+    if (!this.dialogue) return;
+    this.dialogue = null;
+    this.dialogueCloseTimer = -1;
+    this.gameFlow.inDialogue = false;
+    this.dialogueUI.hide();
+    this.player.setFrozen(false);
+    this.interactionSystem.setEnabled(true);
+  }
+
+  private updateDialogue(delta: number): void {
+    if (!this.dialogue) return;
+    const p = this.gameFlow.phase;
+    const visitorPhase = p >= GamePhase.VISITOR_NEIGHBOUR && p <= GamePhase.VISITOR_PARTNER;
+    if (!visitorPhase || !this.gameFlow.getVisitorManager().getActiveVisitor()) {
+      this.closeDialogue(); // never strand the player in a dead dialogue
+      return;
+    }
+    if (this.dialogueCloseTimer > 0) {
+      this.dialogueCloseTimer -= delta;
+      if (this.dialogueCloseTimer <= 0) this.finishDialogue();
+    }
+  }
+
+  public isDialogueOpen(): boolean {
+    return this.dialogue !== null;
   }
 
   private strikeVisitor(): void {
@@ -852,6 +937,7 @@ export class Game {
   }
 
   private triggerEnding(ending: EndingData): void {
+    this.closeDialogue();
     this.shadows.clear();
     this.exitPeephole();
     document.getElementById('hide-overlay')?.classList.add('hidden');
@@ -909,7 +995,7 @@ export class Game {
       if (isLocked) {
         if (clickToPlay) clickToPlay.classList.add('hidden');
         if (this.gameFlow.isPaused) this.resume();
-      } else if (this.isInGame()) {
+      } else if (this.isInGame() && !this.dialogue) { // the dialogue frees the cursor on purpose
         this.pause();
       }
     });
@@ -920,12 +1006,20 @@ export class Game {
     });
 
     window.addEventListener('keydown', (e) => {
-      // During the comic the pointer is not locked, so Esc arrives as a key press: toggle pause
-      if (e.code === 'Escape' && this.gameFlow.phase === GamePhase.MONTAGE) {
+      // During the comic and the door dialogue the pointer is not locked, so Esc arrives as a key
+      // press: toggle pause
+      if (e.code === 'Escape' && (this.gameFlow.phase === GamePhase.MONTAGE || this.dialogue)) {
         if (this.gameFlow.isPaused) this.resume(); else this.pause();
         return;
       }
       if (this.gameFlow.isPaused) return;
+
+      // Talking at the door: 1 / 2 / 3 answer, nothing else
+      if (this.dialogue) {
+        const pick = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+        if (pick >= 0) this.chooseAnswer(pick);
+        return;
+      }
 
       if (DEBUG) this.handleDebugKey(e);
 
@@ -1172,9 +1266,9 @@ export class Game {
 
   // One frame: advance the game clock (frozen while paused) and render
   public step(): void {
-    // Gameplay needs the pointer. If it isn't locked (after the comic or a refused request),
-    // pause behind "Click to continue" and lock on the next click.
-    if (this.isInGame() && !this.gameFlow.isPaused && !this.player.isLocked()) this.pause();
+    // Gameplay needs the pointer. If it isn't locked (after the comic, a dialogue or a refused
+    // request), pause behind "Click to continue" and lock on the next click.
+    if (this.isInGame() && !this.gameFlow.isPaused && !this.player.isLocked() && !this.dialogue) this.pause();
 
     const realDelta = Math.min(this.clock.getDelta(), MAX_FRAME_DELTA);
     const delta = this.gameFlow.isPaused ? 0 : realDelta;
@@ -1193,6 +1287,7 @@ export class Game {
           this.hud.fade(0);
         }
       }
+      this.updateDialogue(delta);
       // Shadows first, so their paranoia shares GameFlow's per-second cap this frame
       const shadowParanoia = this.shadows.update(delta, this.shadowFrame());
       this.gameFlow.update(delta, this.flashlight.isTurnedOn(), time, shadowParanoia);

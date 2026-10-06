@@ -71,33 +71,25 @@ export class VisitorManager {
     }
   }
 
-  public attemptTalk(paranoia: number, evidence: Evidence): { outcome: TalkOutcome; message: string } {
-    if (!this.activeVisitor) return { outcome: 'success', message: 'No visitor at door.' };
-    if (this.talkCooldown > 0) return { outcome: 'fail', message: '...' };
+  // The player opens the door to talk (the dialogue follows). False while still cooling down
+  // from the last talk.
+  public beginTalk(): boolean {
+    if (!this.activeVisitor || this.talkCooldown > 0) return false;
     this.talkCooldown = TALK_COOLDOWN;
     // Answering the door counts as a reply.
     this.unrepliedKnocks = 0;
+    return true;
+  }
 
-    const suspicion = evidence.calculateSuspicion();
-    const severity = evidence.getUncleanedTracesCount() / 4;
-
-    if (paranoia < 70 && suspicion < 0.8) {
+  // The dialogue's verdict, with the same branches the old talk roll had: success sends the
+  // visitor away; a fail can be retried, until the visitor stops listening and pushes inside.
+  public resolveTalk(success: boolean): { outcome: TalkOutcome; message: string } {
+    if (!this.activeVisitor) return { outcome: 'success', message: '' };
+    if (success) {
       const msg = this.activeVisitor.dialogueSuccess;
       this.dismissVisitor();
       return { outcome: 'success', message: msg };
     }
-
-    const failChance = Math.min(
-      0.90,
-      this.activeVisitor.skepticism * (0.3 + 0.45 * severity + 0.5 * suspicion)
-    );
-
-    if (Math.random() > failChance) {
-      const msg = this.activeVisitor.dialogueSuccess;
-      this.dismissVisitor();
-      return { outcome: 'success', message: msg };
-    }
-
     this.failedTalks++;
     const msg = this.activeVisitor.dialogueFail;
     if (this.failedTalks >= MAX_FAILED_TALKS) {

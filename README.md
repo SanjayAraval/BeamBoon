@@ -23,7 +23,8 @@ code. See [CREDITS.md](CREDITS.md).
 | Mouse | Look around (click the game to lock the cursor) |
 | `E` | Interact: pick up, hide a body, clean blood, toggle lights, open doors, look through the peephole |
 | `E` twice on the rear door | Flee (run ending), during the cover-up |
-| `T` | Talk to the visitor (stand at the front door) |
+| `T` | Talk to the visitor (stand at the front door): opens the dialogue |
+| `1` / `2` / `3` or click | Dialogue: pick an answer (keep the DOUBT bar low) |
 | Left click | Attack / shoot |
 | `1` / `2` | Knife / pistol |
 | Mouse wheel | Cycle weapons |

@@ -152,7 +152,7 @@ function cleanEnding(): void {
   for (const who of ['neighbour', 'officer', 'partner']) {
     check(`The ${who} knocks`, waitForKnock(d, 120) && d.flow.getVisitorManager().getActiveVisitor()?.type === who, d.phaseName);
     d.run(1.0);
-    d.press('KeyT');
+    d.talk('best');
     check(`Talks the ${who} away`, !d.flow.getVisitorManager().isVisitorAtDoor(), `paranoia ${d.flow.paranoia.toFixed(0)}`);
   }
   d.runUntil(() => d.phase === GamePhase.ENDING, 30);
@@ -169,11 +169,14 @@ function caughtEnding(): void {
   check('The neighbour knocks', waitForKnock(d, 120));
   check('Ignored, the neighbour gives up and leaves', d.runUntil(() => !d.flow.getVisitorManager().isVisitorAtDoor(), 60));
   check('The officer knocks', waitForKnock(d, 30) && d.flow.getVisitorManager().getActiveVisitor()?.type === 'officer');
-  // Keep answering until the officer stops listening and pushes inside
-  for (let i = 0; i < 10 && d.phase !== GamePhase.ENDING; i++) {
-    d.press('KeyT');
-    d.run(3.5);
-  }
+  // Bad answers twice: the officer stops listening and pushes inside
+  const first = d.talk('worst');
+  check('First talk: worst answers, the officer doubts (FAIL)', first.opened && first.success === false, JSON.stringify(first));
+  check('...and is still at the door', d.flow.getVisitorManager().isVisitorAtDoor());
+  d.run(3.5); // talk cooldown
+  const second = d.talk('worst');
+  check('Second failed talk: the officer forces the door', second.opened && second.success === false);
+  d.runUntil(() => d.phase === GamePhase.ENDING, 5);
   checkEndingScreen(d, ending, 'caught');
   check('Bodies were still out', d.evidence.getExposedBodiesCount() === 2);
 }
@@ -311,7 +314,7 @@ function hideDuringKnock(): void {
   for (const who of ['officer', 'partner']) {
     check(`The ${who} knocks`, waitForKnock(d, 60) && vm.getActiveVisitor()?.type === who, d.phaseName);
     d.run(1.0);
-    d.press('KeyT');
+    d.talk('best');
     check(`Talks the ${who} away`, !vm.isVisitorAtDoor());
   }
   d.runUntil(() => d.phase === GamePhase.ENDING, 30);

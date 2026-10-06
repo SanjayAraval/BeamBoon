@@ -210,6 +210,25 @@
   </div>
 
   <!-- Door Peephole Overlay -->
+  <!-- Talking with the visitor at the door -->
+  <div id="dialogue-overlay" class="dialogue-overlay hidden">
+    <div class="dialogue-box comic-box">
+      <div class="doubt-row">
+        <span class="doubt-label">DOUBT</span>
+        <div class="doubt-bar"><div id="doubt-fill" class="doubt-fill"></div></div>
+        <span id="doubt-val" class="doubt-val">0</span>
+      </div>
+      <h3 id="dialogue-name"></h3>
+      <p id="dialogue-reply" class="dialogue-reply"></p>
+      <p id="dialogue-line" class="dialogue-line"></p>
+      <div class="dialogue-answers">
+        <button id="dialogue-answer-1" class="btn-comic-sm"></button>
+        <button id="dialogue-answer-2" class="btn-comic-sm"></button>
+        <button id="dialogue-answer-3" class="btn-comic-sm"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- Hiding in the closet: dark, with a narrow horizontal slit to look through -->
   <div id="hide-overlay" class="hide-overlay hidden">
     <div class="hide-slit"></div>
