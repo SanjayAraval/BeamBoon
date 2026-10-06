@@ -6,7 +6,7 @@
 // scripted shortcut is locomotion: the player is placed next to what they want to use instead
 // of walking there with WASD. One playthrough per ending: CLEAN, CAUGHT, RUN, BREAKDOWN.
 
-import { resetHeadless, isHidden, elementText } from './test-support/headless';
+import { resetHeadless, isHidden, elementText, comicRoot } from './test-support/headless';
 import { Driver } from './test-support/driver';
 import * as THREE from 'three';
 import { GamePhase } from './src/game/GameFlow';
@@ -58,9 +58,10 @@ function startGame(d: Driver): void {
   check('Title screen is showing', !isHidden('title-screen') && d.phase === GamePhase.TITLE);
   d.clickButton('btn-start');
   check('Start button opens the comic montage', d.phase === GamePhase.MONTAGE);
-  d.holdKey('Enter', 1.3);
-  d.run(1.0);
-  check('Holding Enter skips the montage into the intro', d.phase === GamePhase.ACT1_INTRO, d.phaseName);
+  check('The intro comic is on screen', comicRoot() !== null);
+  d.holdKey('Enter', 1.2);
+  check('Holding Enter skips the comic into the intro', d.runUntil(() => d.phase === GamePhase.ACT1_INTRO, 3), d.phaseName);
+  check('The comic is removed from the page', comicRoot() === null);
   check('Intro grabs pointer lock', d.player.isLocked === true);
   d.holdKey('Space', 1.2);
   d.run(1.0);

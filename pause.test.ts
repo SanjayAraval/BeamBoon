@@ -1,8 +1,10 @@
 // Pause test: the real Game, the real PauseMenu (#pause-overlay and its buttons) and the real
 // frame clock, driven headless on a simulated wall clock. Pausing is triggered the way the
-// browser does it (pointer lock lost on Esc) and resumed with the Resume button.
+// browser does it (pointer lock lost on Esc) and resumed with the Resume button. During the
+// intro comic the cursor is free, so there Esc itself opens and closes the pause menu.
 
-import { simClock, losePointerLock, isHidden, keyDown, keyUp, reloads, resetHeadless } from './test-support/headless';
+import { readFileSync } from 'node:fs';
+import { simClock, losePointerLock, isHidden, keyDown, keyUp, pressKey, reloads, resetHeadless, comicRoot, indexHtml } from './test-support/headless';
 import { Driver, FRAME } from './test-support/driver';
 import { GamePhase } from './src/game/GameFlow';
 import { MAX_FRAME_DELTA } from './src/game/Game';
@@ -29,9 +31,33 @@ const pauseMenu = (game as any).pauseMenu;
 losePointerLock();
 check('No pause on the title screen', !d.flow.isPaused && isHidden('pause-overlay'));
 
+// --- Pause over the intro comic ---------------------------------------------------------
 d.clickButton('btn-start');
-d.holdKey('Enter', 1.3);
+check('Comic is playing', d.phase === GamePhase.MONTAGE && comicRoot() !== null);
 d.run(1.0);
+const comic = (d.flow as any).comic;
+const beat = comic.beat;
+const zOf = (re: RegExp, src: string) => Number(re.exec(src)?.[1]);
+const comicSrc = readFileSync('src/ui/ComicPlayer.ts', 'utf8');
+check('Pause overlay stacks above the comic',
+  zOf(/id="pause-overlay"[^>]*z-index:\s*(\d+)/, indexHtml) > zOf(/\.cmc-root\{[^}]*z-index:(\d+)/, comicSrc) &&
+  zOf(/id="settings-modal"[^>]*z-index:\s*(\d+)/, indexHtml) > zOf(/\.cmc-root\{[^}]*z-index:(\d+)/, comicSrc));
+pressKey('Escape');
+check('Esc during the comic opens the pause menu', d.flow.isPaused && !isHidden('pause-overlay'));
+check('The comic is paused with it', comic.paused === true && comicRoot()!.classList.contains('cmc-paused'));
+const comicClock = game.getGameTime();
+wallFrames(d, 30);
+check('Comic and game clock are frozen while paused', comic.beat === beat && game.getGameTime() === comicClock && d.phase === GamePhase.MONTAGE);
+pressKey('Escape');
+check('Esc again closes the pause menu and resumes the comic', !d.flow.isPaused && isHidden('pause-overlay') && comic.paused === false);
+pressKey('Escape');
+d.clickButton('btn-resume');
+check('Resume button resumes the comic without grabbing the pointer', !d.flow.isPaused && comic.paused === false && !d.player.isLocked);
+d.run(6.0);
+check('Comic plays on after resume', comic.beat > beat);
+
+d.holdKey('Enter', 1.2);
+d.runUntil(() => d.phase === GamePhase.ACT1_INTRO, 3);
 d.holdKey('Space', 1.2);
 d.run(1.0);
 check('Reached free roam (ACT1_MOVIE) with pointer lock', d.phase === GamePhase.ACT1_MOVIE && d.player.isLocked);
@@ -100,8 +126,8 @@ check('After resume the visitor pushes in on the game clock', d.phase === GamePh
 resetHeadless();
 const d2 = new Driver();
 d2.clickButton('btn-start');
-d2.holdKey('Enter', 1.3);
-d2.run(1.0);
+d2.holdKey('Enter', 1.2);
+d2.runUntil(() => d2.phase === GamePhase.ACT1_INTRO, 3);
 d2.holdKey('Space', 1.2);
 d2.run(1.0);
 losePointerLock();

@@ -16,20 +16,23 @@ in code when the game runs:
   HTML canvases at runtime (`src/world/Textures.ts`).
 - **Sound**: wind, thunder, sirens, gunshots, footsteps, knocks, creaks, groans and the heartbeat are
   synthesised with the Web Audio API (`src/audio/ProceduralAudio.ts`).
-- **Comic panels**: the opening montage and overlays are SVG generated in code
-  (`src/ui/comicPanels.ts`, `src/ui/ComicPlayer.ts`).
+- **Comic art**: the intro comic is drawn in code. Every scene and character is SVG
+  generated at runtime (`src/ui/comicArt.ts`); captions, speech bubbles and sound-effect
+  lettering are styled text, and `src/ui/ComicPlayer.ts` animates the panels and page turns.
 - **Visual style**: the halftone comic look is a GLSL shader (`src/render/HalftoneShader.ts`).
 
 No image, model, audio or video files were downloaded, bought or bundled.
 
-**One exception: fonts.** `index.html` loads three typefaces from Google Fonts when the page
-opens. If they can't load (for example, offline), the browser falls back to system fonts.
+**One exception: fonts.** The game loads its typefaces from Google Fonts when the page opens
+(`index.html` for the game UI; the intro comic adds Comic Neue). If they can't load (for
+example, offline), the browser falls back to system fonts.
 
-| Font | Designer | Licence |
-| :--- | :--- | :--- |
-| Bangers | Vernon Adams | SIL Open Font License 1.1 |
-| Courier Prime | Alan Dague-Greene | SIL Open Font License 1.1 |
-| Special Elite | Astigmatic | Apache License 2.0 |
+| Font | Used for | Designer | Licence |
+| :--- | :--- | :--- | :--- |
+| Bangers | Titles, comic sound effects | Vernon Adams | SIL Open Font License 1.1 |
+| Comic Neue | Comic speech bubbles | Craig Rozynski, Hrant Papazian | SIL Open Font License 1.1 |
+| Special Elite | Comic captions, typewriter text | Astigmatic | Apache License 2.0 |
+| Courier Prime | Body text | Alan Dague-Greene | SIL Open Font License 1.1 |
 
 ## Libraries
 

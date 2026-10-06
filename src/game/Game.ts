@@ -121,7 +121,12 @@ export class Game {
     this.registerInteractables();
 
     this.pauseMenu = new PauseMenu(
-      () => this.player.lockPointer(), // unpausing happens in the pointerlockchange handler
+      () => {
+        // The comic is played with a free cursor: resume directly. In game, re-lock the pointer;
+        // unpausing then happens in the pointerlockchange handler.
+        if (this.gameFlow.phase === GamePhase.MONTAGE) this.resume();
+        else this.player.lockPointer();
+      },
       () => location.reload()
     );
 
@@ -412,12 +417,12 @@ export class Game {
   // ---------------------------------------------------------------------------
 
   private pause(): void {
-    this.gameFlow.isPaused = true;
+    this.gameFlow.setPaused(true);
     this.pauseMenu.show();
   }
 
   private resume(): void {
-    this.gameFlow.isPaused = false;
+    this.gameFlow.setPaused(false);
     this.pauseMenu.hide();
     this.clock.getDelta(); // don't feed the paused time into the next frame
   }
@@ -584,6 +589,11 @@ export class Game {
     });
 
     window.addEventListener('keydown', (e) => {
+      // During the comic the pointer is not locked, so Esc arrives as a key press: toggle pause
+      if (e.code === 'Escape' && this.gameFlow.phase === GamePhase.MONTAGE) {
+        if (this.gameFlow.isPaused) this.resume(); else this.pause();
+        return;
+      }
       if (this.gameFlow.isPaused) return;
 
       if (DEBUG) this.handleDebugKey(e);

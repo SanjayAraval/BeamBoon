@@ -1,367 +1,238 @@
+// ComicPlayer.ts : animated comic book intro for CoverUp. Self-contained: no dependencies, no assets.
+//
+//   import { ComicPlayer } from './ComicPlayer';
+//   const comic = new ComicPlayer(document.body, { onCue: name => sound.play(name), onDone: () => flow.advance() });
+//   // every frame, with the GAME clock (so pause works):  comic.update(dt);
+//   comic.setPaused(true/false);   comic.dispose();
+//
+// Cues sent to onCue: 'thunder' | 'tv' | 'click' | 'creak' | 'heartbeat' | 'knock'
+// Controls: click / Space / Enter advances. HOLD Enter (or Space) 1s to skip all. Esc is NOT used.
+import { SCENES } from './comicArt';
 
-import { pages, ComicPageDef, ComicPanelDef } from './comicPanels';
-import { SoundManager } from '../audio/SoundManager';
+type Bubble = { x: number; y: number; w?: number; text: string; tail?: 'dl' | 'dr' | 'ul' | 'ur' | 'none'; kind?: 'say' | 'think' | 'shout' };
+type Sfx = { text: string; x: number; y: number; rot?: number; size?: number; color?: 'yellow' | 'white' | 'black' };
+interface PanelDef { scene: number; caption?: string; bubbles?: Bubble[]; sfx?: Sfx; cue?: string; dur?: number; motion?: 'in' | 'left' | 'right' | 'up'; origin?: string; }
+interface PageDef { layout: 'stagger' | 'stagger2' | 'full'; panels: PanelDef[]; }
+
+export const COMIC_PAGES: PageDef[] = [
+  { layout: 'stagger', panels: [
+    { scene: 0, caption: 'AGE SIX. EVERY SHADOW HAD TEETH.', sfx: { text: 'BOOM!', x: 6, y: 8, rot: -8, size: 62 }, cue: 'thunder', origin: '30% 80%' },
+    { scene: 1, caption: 'DAD ALWAYS BROUGHT THE JOB HOME.', bubbles: [{ x: 36, y: 5, w: 52, text: '...and THAT is why we ALWAYS lock the door.', tail: 'dl' }], motion: 'left', origin: '30% 40%' },
+  ] },
+  { layout: 'stagger2', panels: [
+    { scene: 2, caption: 'MOM AND DAD DRANK TO FORGET THE DAY.', bubbles: [{ x: 44, y: 6, w: 34, text: '...are you okay?', tail: 'dr', kind: 'think' }, { x: 24, y: 66, w: 36, text: 'Go to bed, sweetie.', tail: 'ur' }], cue: 'tv', motion: 'right', origin: '50% 40%' },
+    { scene: 3, caption: 'HE CHECKED THE LOCKS. THEN HE CHECKED THEM AGAIN.', sfx: { text: 'click', x: 66, y: 76, rot: 6, size: 40, color: 'white' }, cue: 'click', origin: '70% 50%' },
+  ] },
+  { layout: 'stagger', panels: [
+    { scene: 4, bubbles: [{ x: 3, y: 6, w: 44, text: 'Never touch this. Ever.', tail: 'dr', kind: 'shout' }], sfx: { text: 'CLICK', x: 58, y: 14, rot: 8, size: 56, color: 'yellow' }, cue: 'click', motion: 'left', origin: '85% 60%' },
+    { scene: 5, caption: 'THE MORE HE WATCHED, THE MORE HE SAW.', cue: 'tv', origin: '70% 30%' },
+  ] },
+  { layout: 'stagger2', panels: [
+    { scene: 6, caption: 'EVEN THE NEIGHBOURS LOOKED WRONG.', sfx: { text: "THEY'RE WATCHING.", x: 3, y: 80, rot: -5, size: 34, color: 'white' }, cue: 'heartbeat', origin: '50% 50%' },
+    { scene: 7, caption: 'TONIGHT, THE STORM CAME EARLY.', sfx: { text: 'RUMBLE', x: 6, y: 72, rot: -4, size: 40, color: 'yellow' }, cue: 'thunder', motion: 'right', origin: '60% 40%' },
+  ] },
+  { layout: 'full', panels: [
+    { scene: 8, sfx: { text: 'CLICK.', x: 56, y: 38, rot: -4, size: 96, color: 'yellow' }, cue: 'click', dur: 4.6, motion: 'up', origin: '60% 60%' },
+  ] },
+];
+
+const CSS = `
+.cmc-root{position:fixed;inset:0;z-index:9000;background:#07070a;display:flex;align-items:center;justify-content:center;overflow:hidden;user-select:none;cursor:pointer;font-family:var(--cmc-body,'Comic Neue','Comic Sans MS','Segoe Print',cursive)}
+.cmc-stage{position:relative;width:1280px;height:720px;flex:none;transform-origin:center center;background:#e9e2cf}
+.cmc-stage:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 20% 20%,rgba(0,0,0,.05),transparent 50%),radial-gradient(circle,rgba(0,0,0,.14) 1px,transparent 1.6px) 0 0/9px 9px;pointer-events:none}
+.cmc-page{position:absolute;inset:0;animation:cmc-pagein .5s ease-out both}
+.cmc-page.out{animation:cmc-pageout .45s ease-in both}
+@keyframes cmc-pagein{from{opacity:0;transform:translateX(40px) rotate(.6deg)}to{opacity:1;transform:none}}
+@keyframes cmc-pageout{to{opacity:0;transform:translateX(-60px) rotate(-.8deg)}}
+.cmc-panel{position:absolute;aspect-ratio:4/3;background:#000;border:7px solid #0b0b0b;box-shadow:10px 10px 0 rgba(0,0,0,.85);overflow:hidden;visibility:hidden}
+.cmc-panel.in{visibility:visible;animation:cmc-slam .42s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes cmc-slam{0%{transform:scale(1.35) rotate(var(--rot,0deg));opacity:0}55%{opacity:1}100%{transform:scale(1) rotate(var(--rot,0deg))}}
+.cmc-panel.full{aspect-ratio:auto}
+.cmc-art{position:absolute;inset:0;transform-origin:var(--org,50% 50%)}
+.cmc-art svg{width:100%;height:100%;display:block}
+.cmc-panel.in .cmc-art{animation:var(--kb,cmc-kbin) var(--dur,5s) linear both}
+@keyframes cmc-kbin{from{transform:scale(1)}to{transform:scale(1.14)}}
+@keyframes cmc-kbleft{from{transform:scale(1.12) translateX(3%)}to{transform:scale(1.12) translateX(-3%)}}
+@keyframes cmc-kbright{from{transform:scale(1.12) translateX(-3%)}to{transform:scale(1.12) translateX(3%)}}
+@keyframes cmc-kbup{from{transform:scale(1.02) translateY(3%)}to{transform:scale(1.2) translateY(-1%)}}
+.cmc-paused *{animation-play-state:paused!important}
+.cmc-cap{position:absolute;left:0;top:0;max-width:78%;background:#ffd400;color:#0b0b0b;border:4px solid #0b0b0b;border-left:0;border-top:0;padding:8px 14px 9px;font:700 21px/1.18 var(--cmc-cap,'Special Elite','Courier New',monospace);letter-spacing:.5px;text-transform:uppercase;min-height:26px;z-index:4}
+.cmc-bub{position:absolute;background:#fff;color:#0b0b0b;border:4px solid #0b0b0b;border-radius:50% / 42%;padding:14px 22px;font:700 22px/1.12 var(--cmc-body,'Comic Neue','Comic Sans MS',cursive);text-align:center;z-index:5;transform:scale(0);transform-origin:50% 100%}
+.cmc-bub.show{animation:cmc-pop .32s cubic-bezier(.2,1.8,.4,1) both}
+@keyframes cmc-pop{to{transform:scale(1)}}
+.cmc-bub.shout{border-radius:6px;background:#fff7c2;font-family:var(--cmc-sfx,'Bangers','Impact',sans-serif);letter-spacing:1px;font-size:27px;clip-path:polygon(0 8%,6% 0,16% 8%,28% 0,40% 7%,52% 0,64% 8%,76% 0,88% 7%,100% 0,95% 40%,100% 62%,94% 100%,80% 92%,66% 100%,52% 93%,38% 100%,24% 92%,12% 100%,0 90%,5% 55%)}
+.cmc-bub.think{border-style:dashed}
+.cmc-bub:after{content:"";position:absolute;width:26px;height:30px;background:#fff;border:4px solid #0b0b0b;border-top:0;border-right:0;transform:skewX(-25deg) rotate(10deg)}
+.cmc-bub.tdl:after{left:20%;bottom:-22px}
+.cmc-bub.tdr:after{right:20%;bottom:-22px;transform:scaleX(-1) skewX(-25deg) rotate(10deg)}
+.cmc-bub.tul:after{left:20%;top:-24px;transform:scaleY(-1) skewX(-25deg) rotate(10deg)}
+.cmc-bub.tur:after{right:20%;top:-24px;transform:scale(-1,-1) skewX(-25deg) rotate(10deg)}
+.cmc-bub.tnone:after,.cmc-bub.shout:after{display:none}
+.cmc-sfx{position:absolute;z-index:6;font-family:var(--cmc-sfx,'Bangers','Impact',sans-serif);letter-spacing:2px;line-height:.95;transform:scale(0) rotate(var(--r,0deg));text-shadow:3px 3px 0 #0b0b0b,-3px 3px 0 #0b0b0b,3px -3px 0 #0b0b0b,-3px -3px 0 #0b0b0b,0 5px 0 #0b0b0b;-webkit-text-stroke:2px #0b0b0b;white-space:nowrap;pointer-events:none}
+.cmc-sfx.yellow{color:#ffd400}.cmc-sfx.white{color:#f4f1e6}.cmc-sfx.black{color:#0b0b0b;text-shadow:none;-webkit-text-stroke:0}
+.cmc-sfx.show{animation:cmc-sfxin .38s cubic-bezier(.2,2,.4,1) both,cmc-shake .12s .4s 4 linear}
+@keyframes cmc-sfxin{to{transform:scale(1) rotate(var(--r,0deg))}}
+@keyframes cmc-shake{0%,100%{margin:0}25%{margin:-3px 0 0 3px}75%{margin:3px 0 0 -3px}}
+.cmc-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:7}
+.cmc-flash.go{animation:cmc-fl .35s ease-out}
+@keyframes cmc-fl{0%{opacity:.85}100%{opacity:0}}
+.cmc-hint{position:absolute;right:22px;bottom:16px;font:700 15px 'Special Elite','Courier New',monospace;color:#0b0b0b;background:rgba(255,255,255,.85);border:3px solid #0b0b0b;padding:4px 10px;z-index:20;opacity:0;transition:opacity .4s}
+.cmc-hint.show{opacity:1}
+.cmc-hint i{display:block;height:5px;margin-top:4px;background:#0b0b0b;width:0}
+.cmc-fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:30;transition:opacity .9s}
+.cmc-fade.on{opacity:1}
+`;
+
+const LAYOUTS: Record<string, Array<Record<string, string>>> = {
+  stagger:  [{ left: '3.2%', top: '4.5%', width: '54%', '--rot': '-0.7deg' }, { right: '3.2%', bottom: '4.5%', width: '47%', '--rot': '0.8deg' }],
+  stagger2: [{ right: '3.2%', top: '4.5%', width: '54%', '--rot': '0.7deg' }, { left: '3.2%', bottom: '4.5%', width: '47%', '--rot': '-0.8deg' }],
+  full:     [{ left: '2.6%', top: '3.6%', width: '94.8%', height: '92.8%', '--rot': '0deg' }],
+};
+
+interface Beat { page: number; idx: number; def: PanelDef; }
+
+export interface ComicOptions {
+  onCue?: (cue: string) => void;
+  onDone?: () => void;
+  injectFonts?: boolean;       // load Bangers + Comic Neue + Special Elite from Google Fonts (OFL). Default true.
+  autoAdvance?: boolean;       // default true
+}
 
 export class ComicPlayer {
-        private pageIndex = 0;
-    private panelIndex = 0;
-    private onComplete: (startingParanoia: number) => void;
-    private timer = 0;
-    private isPlaying = false;
-    private skipHoldTimer = 0;
-    
-    // UI elements
-    private panelContainer: HTMLElement;
-    private overlay: HTMLElement;
-    
-    private boundKeyDown: (e: KeyboardEvent) => void;
-    private boundKeyUp: (e: KeyboardEvent) => void;
-    private boundClick: () => void;
-    
-    private keysHeld = new Set<string>();
-    private timeLastFrame = 0;
-    private rafId = 0;
+  private root: HTMLDivElement;
+  private stage: HTMLDivElement;
+  private hint: HTMLDivElement;
+  private fade: HTMLDivElement;
+  private beats: Beat[] = [];
+  private beat = -1;
+  private t = 0;
+  private pageEl: HTMLDivElement | null = null;
+  private panels: HTMLDivElement[] = [];
+  private paused = false;
+  private done = false;
+  private turning = 0;
+  private pendingBeat = -1;
+  private holdT = 0;
+  private holding = false;
+  private holdKey = '';
+  private elapsed = 0;
+  private typedFor = -1;
+  private captionEl: HTMLDivElement | null = null;
+  private cleanup: Array<() => void> = [];
+  private opts: ComicOptions;
+  private started = false;
 
-    constructor(onComplete: (paranoia: number) => void) {
-        this.onComplete = onComplete;
-        
-        this.overlay = document.createElement('div');
-        this.overlay.className = 'comic-overlay overlay';
-        this.overlay.style.backgroundColor = '#111';
-        this.overlay.style.zIndex = '9500';
-        this.overlay.style.display = 'flex';
-        this.overlay.style.flexDirection = 'column';
-        this.overlay.style.alignItems = 'center';
-        this.overlay.style.justifyContent = 'center';
-        
-        this.panelContainer = document.createElement('div');
-        this.panelContainer.className = 'comic-page';
-        this.panelContainer.style.display = 'flex';
-        this.panelContainer.style.flexWrap = 'wrap';
-        this.panelContainer.style.gap = '20px';
-        this.panelContainer.style.width = '90vw';
-        this.panelContainer.style.maxWidth = '1000px';
-        this.panelContainer.style.height = '80vh';
-        this.panelContainer.style.justifyContent = 'center';
-        this.panelContainer.style.alignItems = 'center';
-        
-        this.overlay.appendChild(this.panelContainer);
-        document.body.appendChild(this.overlay);
-
-        // Add a style tag for animations
-        const style = document.createElement('style');
-        style.innerHTML = `
-            @keyframes slam {
-                0% { transform: scale(1.15) rotate(5deg); opacity: 0; }
-                50% { transform: scale(0.98) rotate(-2deg); opacity: 1; }
-                100% { transform: scale(1) rotate(0deg); opacity: 1; }
-            }
-            @keyframes pop {
-                0% { transform: scale(0); }
-                80% { transform: scale(1.1); }
-                100% { transform: scale(1); }
-            }
-            @keyframes punch {
-                0% { transform: scale(0); opacity: 1; }
-                20% { transform: scale(1.5); opacity: 1; }
-                100% { transform: scale(2); opacity: 0; }
-            }
-            @keyframes kenz-zoom-in { from { transform: scale(1); } to { transform: scale(1.1); } }
-            @keyframes kenz-zoom-out { from { transform: scale(1.1); } to { transform: scale(1); } }
-            @keyframes kenz-pan-left { from { transform: translateX(0); } to { transform: translateX(-5%); } }
-            @keyframes kenz-pan-right { from { transform: translateX(-5%); } to { transform: translateX(0); } }
-            @keyframes kenz-pan-down { from { transform: translateY(0); } to { transform: translateY(5%); } }
-            
-            .comic-panel-frame {
-                position: relative;
-                border: 6px solid #111;
-                background: #f4f4f0;
-                overflow: hidden;
-                box-shadow: 8px 8px 0px rgba(0,0,0,0.8);
-                animation: slam 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-                opacity: 0;
-            }
-            .comic-panel-svg {
-                width: 100%;
-                height: 100%;
-            }
-            .comic-caption {
-                position: absolute;
-                top: 10px;
-                left: 10px;
-                background: #ffd700;
-                border: 3px solid #111;
-                padding: 5px 10px;
-                font-family: 'Courier Prime', monospace;
-                font-weight: bold;
-                font-size: 16px;
-                color: #111;
-                max-width: 80%;
-                box-shadow: 4px 4px 0 #111;
-            }
-            .comic-bubble {
-                position: absolute;
-                background: #fff;
-                border: 3px solid #111;
-                border-radius: 50%;
-                padding: 10px 15px;
-                font-family: 'Courier Prime', monospace;
-                font-size: 14px;
-                color: #111;
-                text-align: center;
-                animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-            }
-            .comic-sfx {
-                position: absolute;
-                font-family: 'Bangers', sans-serif;
-                font-size: 48px;
-                font-style: italic;
-                text-shadow: 3px 3px 0 #111;
-                animation: punch 1s forwards;
-            }
-            .comic-skip-hint {
-                position: absolute;
-                bottom: 20px;
-                right: 20px;
-                font-family: 'Special Elite', monospace;
-                color: #fff;
-                font-size: 18px;
-                opacity: 0.7;
-            }
-        `;
-        document.head.appendChild(style);
-
-        this.boundKeyDown = this.onKeyDown.bind(this);
-        this.boundKeyUp = this.onKeyUp.bind(this);
-        this.boundClick = this.advance.bind(this);
+  constructor(parent: HTMLElement, opts: ComicOptions = {}) {
+    this.opts = { autoAdvance: true, injectFonts: true, ...opts };
+    COMIC_PAGES.forEach((p, pi) => p.panels.forEach((def, idx) => this.beats.push({ page: pi, idx, def })));
+    if (!document.getElementById('cmc-css')) { const s = document.createElement('style'); s.id = 'cmc-css'; s.textContent = CSS; document.head.appendChild(s); }
+    if (this.opts.injectFonts && !document.getElementById('cmc-fonts')) {
+      const l = document.createElement('link'); l.id = 'cmc-fonts'; l.rel = 'stylesheet';
+      l.href = 'https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@700&family=Special+Elite&display=swap';
+      document.head.appendChild(l);
     }
+    this.root = document.createElement('div'); this.root.className = 'cmc-root';
+    this.stage = document.createElement('div'); this.stage.className = 'cmc-stage';
+    this.hint = document.createElement('div'); this.hint.className = 'cmc-hint'; this.hint.innerHTML = 'Hold ENTER to skip<i></i>';
+    this.fade = document.createElement('div'); this.fade.className = 'cmc-fade';
+    this.root.append(this.stage, this.hint, this.fade);
+    parent.appendChild(this.root);
+    this.fit();
+    const onResize = () => this.fit(); window.addEventListener('resize', onResize); this.cleanup.push(() => window.removeEventListener('resize', onResize));
+    const onClick = (e: MouseEvent) => { e.stopPropagation(); if (!this.paused) this.next(); };
+    this.root.addEventListener('mousedown', onClick); this.cleanup.push(() => this.root.removeEventListener('mousedown', onClick));
+    const kd = (e: KeyboardEvent) => {
+      if (e.code === 'Escape' || e.repeat) return;
+      if (e.code === 'Enter' || e.code === 'Space') { this.holding = true; this.holdT = 0; this.holdKey = e.code; e.preventDefault(); e.stopPropagation(); }
+    };
+    const ku = (e: KeyboardEvent) => {
+      if (e.code === this.holdKey && this.holding) { const quick = this.holdT < 0.35; this.holding = false; this.holdT = 0; this.setHold(0); if (quick && !this.paused) this.next(); e.preventDefault(); e.stopPropagation(); }
+    };
+    window.addEventListener('keydown', kd, true); window.addEventListener('keyup', ku, true);
+    this.cleanup.push(() => { window.removeEventListener('keydown', kd, true); window.removeEventListener('keyup', ku, true); });
+    this.go(0);
+  }
 
-    public start(): void {
-        this.isPlaying = true;
-        this.pageIndex = 0;
-        this.panelIndex = 0;
-        this.timer = 0;
-        
-        window.addEventListener('keydown', this.boundKeyDown);
-        window.addEventListener('keyup', this.boundKeyUp);
-        window.addEventListener('click', this.boundClick);
-        
-        
-        this.renderPage();
+  get finished() { return this.done; }
+  setPaused(p: boolean) { this.paused = p; this.root.classList.toggle('cmc-paused', p); }
+
+  private fit() { const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720); this.stage.style.transform = `scale(${s})`; }
+  private setHold(f: number) { const bar = this.hint.querySelector('i') as HTMLElement; if (bar) bar.style.width = `${Math.round(f * 100)}%`; }
+
+  /** advance with the game clock */
+  update(dt: number) {
+    if (this.done || this.paused) return;
+    this.elapsed += dt;
+    if (this.elapsed > 2.5 && !this.hint.classList.contains('show')) this.hint.classList.add('show');
+    if (this.holding) { this.holdT += dt; this.setHold(Math.min(1, this.holdT / 1)); if (this.holdT >= 1) { this.holding = false; this.finish(); return; } }
+    if (this.turning > 0) { this.turning -= dt; if (this.turning <= 0 && this.pendingBeat >= 0) { const b = this.pendingBeat; this.pendingBeat = -1; this.go(b); } return; }
+    this.t += dt;
+    const def = this.beats[this.beat].def;
+    // typewriter
+    if (this.captionEl && def.caption) {
+      const n = Math.min(def.caption.length, Math.floor(Math.max(0, this.t - 0.35) * 34));
+      if (n !== this.typedFor) { this.typedFor = n; this.captionEl.textContent = def.caption.slice(0, n); }
     }
-    
-    private onKeyDown(e: KeyboardEvent) {
-        this.keysHeld.add(e.code);
-        if (e.code === 'Space' && !e.repeat) {
-            this.advance();
-        }
-    }
-    
-    private onKeyUp(e: KeyboardEvent) {
-        this.keysHeld.delete(e.code);
-        if (e.code === 'Enter') {
-            // Check if it was a quick tap vs hold
-            if (this.skipHoldTimer < 1.0) {
-                this.advance();
-            }
-        }
-    }
+    if (this.opts.autoAdvance && this.t >= (def.dur ?? this.dwell(def))) this.next();
+  }
 
-    private advance(): void {
-        if (!this.isPlaying) return;
-        
-        const page = pages[this.pageIndex];
-        if (this.panelIndex < page.panels.length - 1) {
-            this.panelIndex++;
-            this.timer = 0;
-            this.showPanel(page.panels[this.panelIndex]);
-        } else {
-            // Next page
-            this.pageIndex++;
-            this.panelIndex = 0;
-            this.timer = 0;
-            if (this.pageIndex >= pages.length) {
-                this.finish();
-            } else {
-                this.renderPage();
-            }
-        }
-    }
+  private dwell(def: PanelDef) { return Math.max(4.2, (def.caption?.length ?? 0) * 0.075 + 2.2); }
 
-    private renderPage(): void {
-        this.panelContainer.innerHTML = ''; // clear
-        const page = pages[this.pageIndex];
-        this.showPanel(page.panels[this.panelIndex]);
-    }
+  next() {
+    if (this.done || this.turning > 0) return;
+    const def = this.beats[this.beat].def;
+    // first click completes the caption, second advances
+    if (def.caption && this.captionEl && this.typedFor < def.caption.length && this.t < 1.6) { this.typedFor = def.caption.length; this.captionEl.textContent = def.caption; this.t = Math.max(this.t, 1.0); return; }
+    const nb = this.beat + 1;
+    if (nb >= this.beats.length) { this.finish(); return; }
+    if (this.beats[nb].page !== this.beats[this.beat].page) {
+      if (this.pageEl) this.pageEl.classList.add('out');
+      this.turning = 0.45; this.pendingBeat = nb;
+    } else this.go(nb);
+  }
 
-    private showPanel(def: ComicPanelDef): void {
-        const frame = document.createElement('div');
-        frame.className = 'comic-panel-frame';
-        
-        // Randomize slight rotation for comic feel (-2 to 2 deg)
-        const rot = (Math.random() - 0.5) * 4;
-        frame.style.transform = `rotate(${rot}deg)`;
-        
-        // Calculate size based on number of panels
-        const page = pages[this.pageIndex];
-        const numPanels = page.panels.length;
-        if (numPanels === 1) {
-            frame.style.width = '100%';
-            frame.style.height = '100%';
-        } else if (numPanels === 2) {
-            frame.style.width = '45%';
-            frame.style.height = '100%';
-        } else {
-            // 3 panels
-            if (this.panelIndex === 0) {
-                frame.style.width = '100%';
-                frame.style.height = '45%';
-            } else {
-                frame.style.width = '45%';
-                frame.style.height = '45%';
-            }
-        }
+  private go(i: number) {
+    const b = this.beats[i];
+    if (!this.pageEl || this.beat < 0 || this.beats[this.beat].page !== b.page) this.buildPage(b.page);
+    this.beat = i; this.t = 0; this.typedFor = -1;
+    const el = this.panels[b.idx]; el.classList.add('in');
+    const def = b.def;
+    const art = el.querySelector('.cmc-art') as HTMLElement;
+    art.style.setProperty('--dur', `${(def.dur ?? this.dwell(def)) + 1.5}s`);
+    art.style.setProperty('--kb', def.motion === 'left' ? 'cmc-kbleft' : def.motion === 'right' ? 'cmc-kbright' : def.motion === 'up' ? 'cmc-kbup' : 'cmc-kbin');
+    this.captionEl = el.querySelector('.cmc-cap');
+    if (this.captionEl) this.captionEl.textContent = '';
+    el.querySelectorAll('.cmc-bub').forEach((n, k) => setTimeout(() => n.classList.add('show'), 700 + k * 650));
+    el.querySelectorAll('.cmc-sfx').forEach(n => setTimeout(() => n.classList.add('show'), 380));
+    const fl = el.querySelector('.cmc-flash') as HTMLElement | null;
+    if (fl && (def.cue === 'thunder' || def.cue === 'click')) { fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go'); }
+    if (def.cue) this.opts.onCue?.(def.cue);
+  }
 
-        // Inner container for camera motion
-        const inner = document.createElement('div');
-        inner.style.width = '100%';
-        inner.style.height = '100%';
-        const durStr = (def.duration || 5) + 's';
-        if (def.cameraMotion === 'zoom-in') inner.style.animation = `kenz-zoom-in ${durStr} linear forwards`;
-        if (def.cameraMotion === 'zoom-out') inner.style.animation = `kenz-zoom-out ${durStr} linear forwards`;
-        if (def.cameraMotion === 'pan-left') inner.style.animation = `kenz-pan-left ${durStr} linear forwards`;
-        if (def.cameraMotion === 'pan-right') inner.style.animation = `kenz-pan-right ${durStr} linear forwards`;
-        if (def.cameraMotion === 'pan-down') inner.style.animation = `kenz-pan-down ${durStr} linear forwards`;
+  private buildPage(pi: number) {
+    this.stage.innerHTML = ''; this.panels = [];
+    const page = document.createElement('div'); page.className = 'cmc-page';
+    const pg = COMIC_PAGES[pi]; const lay = LAYOUTS[pg.layout];
+    pg.panels.forEach((def, k) => {
+      const p = document.createElement('div'); p.className = 'cmc-panel' + (pg.layout === 'full' ? ' full' : '');
+      for (const [key, v] of Object.entries(lay[k])) key.startsWith('--') ? p.style.setProperty(key, v) : (p.style as any)[key] = v;
+      const art = document.createElement('div'); art.className = 'cmc-art'; art.style.setProperty('--org', def.origin ?? '50% 50%'); art.innerHTML = SCENES[def.scene](); p.appendChild(art);
+      if (def.caption) { const c = document.createElement('div'); c.className = 'cmc-cap'; p.appendChild(c); }
+      (def.bubbles ?? []).forEach(bb => {
+        const d = document.createElement('div'); d.className = `cmc-bub t${bb.tail ?? 'dl'} ${bb.kind ?? 'say'}`;
+        d.style.left = `${bb.x}%`; d.style.top = `${bb.y}%`; d.style.width = `${bb.w ?? 40}%`; d.textContent = bb.text; p.appendChild(d);
+      });
+      if (def.sfx) { const s = def.sfx; const d = document.createElement('div'); d.className = `cmc-sfx ${s.color ?? 'yellow'}`; d.style.left = `${s.x}%`; d.style.top = `${s.y}%`; d.style.fontSize = `${s.size ?? 50}px`; d.style.setProperty('--r', `${s.rot ?? 0}deg`); d.textContent = s.text; p.appendChild(d); }
+      const fl = document.createElement('div'); fl.className = 'cmc-flash'; p.appendChild(fl);
+      page.appendChild(p); this.panels.push(p);
+    });
+    this.stage.appendChild(page); this.pageEl = page;
+  }
 
-        // SVG
-        const svgStr = `<svg viewBox="0 0 400 400" preserveAspectRatio="xMidYMid slice" class="comic-panel-svg">
-            <filter id="paper-${def.id}">
-                <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" result="noise" />
-                <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.1 0" in="noise" result="coloredNoise" />
-                <feBlend in="SourceGraphic" in2="coloredNoise" mode="multiply" />
-            </filter>
-            <g filter="url(#paper-${def.id})">
-                ${def.svgContent()}
-            </g>
-        </svg>`;
-        inner.innerHTML = svgStr;
-        frame.appendChild(inner);
+  private finish() {
+    if (this.done) return; this.done = true; this.fade.classList.add('on');
+    setTimeout(() => { this.opts.onDone?.(); this.dispose(); }, 950);
+  }
 
-        // Caption (typewriter effect)
-        if (def.caption) {
-            const cap = document.createElement('div');
-            cap.className = 'comic-caption';
-            frame.appendChild(cap);
-            let charIdx = 0;
-            const text = def.caption;
-            const typeInterval = setInterval(() => {
-                if (charIdx < text.length && this.isPlaying) {
-                    // textContent, not innerText: innerText drops the trailing space on every read
-                    cap.textContent += text[charIdx];
-                    charIdx++;
-                } else {
-                    clearInterval(typeInterval);
-                }
-            }, 30);
-        }
-
-        // Bubbles
-        if (def.bubbles) {
-            def.bubbles.forEach((b, i) => {
-                setTimeout(() => {
-                    if (!this.isPlaying) return;
-                    const bub = document.createElement('div');
-                    bub.className = 'comic-bubble';
-                    bub.innerText = b.text;
-                    bub.style.left = b.x;
-                    bub.style.top = b.y;
-                    frame.appendChild(bub);
-                }, 500 + i * 800);
-            });
-        }
-
-        // SFX
-        if (def.sfx) {
-            setTimeout(() => {
-                if (!this.isPlaying) return;
-                const sfx = document.createElement('div');
-                sfx.className = 'comic-sfx';
-                sfx.innerText = def.sfx!.text;
-                sfx.style.left = def.sfx!.x;
-                sfx.style.top = def.sfx!.y;
-                sfx.style.color = def.sfx!.color || '#fff';
-                frame.appendChild(sfx);
-            }, 300);
-        }
-
-        this.panelContainer.appendChild(frame);
-
-        // Sound Event
-        if (def.soundEvent) {
-            const sm = SoundManager.getInstance();
-            if (def.soundEvent === 'thunder') sm.playThunder(0.8);
-            if (def.soundEvent === 'creak') sm.playCreak();
-            if (def.soundEvent === 'click') (sm as any).playClick ? (sm as any).playClick() : sm.playKnock(); // fallback to knock if click not exist
-            if (def.soundEvent === 'tv') sm.playGroan(); // fallback
-            if (def.soundEvent === 'heartbeat') sm.updateHeartbeat(60);
-        }
-    }
-
-    public update(delta: number): void {
-        if (!this.isPlaying) return;
-        
-        // Timer for auto-advance
-        this.timer += delta;
-        const page = pages[this.pageIndex];
-        const panel = page.panels[this.panelIndex];
-        const dur = panel.duration || 5;
-        
-        if (this.timer >= dur) {
-            this.advance();
-        }
-
-        // Check hold to skip
-        if (this.keysHeld.has('Enter')) {
-            this.skipHoldTimer += delta;
-            if (this.skipHoldTimer >= 1.0) {
-                this.finish();
-                return;
-            }
-        } else {
-            this.skipHoldTimer = 0;
-        }
-
-        // Show skip hint
-        let skipHint = document.getElementById('montage-skip-hint');
-        if (!skipHint) {
-            skipHint = document.createElement('div');
-            skipHint.id = 'montage-skip-hint';
-            skipHint.className = 'comic-skip-hint';
-            skipHint.innerText = 'Hold ENTER to skip';
-            this.overlay.appendChild(skipHint);
-        }
-        
-        // total time checking (rough)
-        skipHint.style.display = 'block';
-
-    }
-
-    private finish(): void {
-        if (!this.isPlaying) return;
-        this.isPlaying = false;
-
-        
-        window.removeEventListener('keydown', this.boundKeyDown);
-        window.removeEventListener('keyup', this.boundKeyUp);
-        window.removeEventListener('click', this.boundClick);
-        
-        // Clean up
-        this.overlay.remove();
-        
-        const sm = SoundManager.getInstance();
-        sm.updateHeartbeat(0);
-        
-        // We set paranoia to 0 since intro will take over
-        this.onComplete(0);
-    }
+  dispose() { this.cleanup.forEach(f => f()); this.cleanup = []; this.root.remove(); }
 }

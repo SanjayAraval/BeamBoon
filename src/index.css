@@ -428,55 +428,6 @@ html, body {
   100% { transform: scale(1.0); opacity: 0; }
 }
 
-/* Opening Montage */
-.montage-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 15;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  padding-bottom: 40px;
-  background: rgba(0,0,0,0.4);
-}
-
-.montage-card {
-  max-width: 700px;
-  text-align: left;
-}
-
-.montage-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 2px solid var(--comic-yellow);
-  padding-bottom: 8px;
-  margin-bottom: 12px;
-}
-
-.montage-header h2 {
-  font-family: 'Bangers', cursive;
-  font-size: 1.8rem;
-  color: var(--comic-yellow);
-}
-
-.montage-text {
-  font-family: 'Special Elite', cursive;
-  font-size: 1.1rem;
-  line-height: 1.5;
-  margin-bottom: 15px;
-}
-
-.montage-clue-hint {
-  font-style: italic;
-  color: #ff9900;
-  font-size: 0.95rem;
-  margin-bottom: 10px;
-}
-
 /* Peephole Overlay */
 .peephole-overlay {
   position: absolute;

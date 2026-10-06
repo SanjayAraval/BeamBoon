@@ -99,6 +99,16 @@ export class SoundManager {
     this.audio.playDogBark();
   }
 
+  // Short, quiet sounds for the intro comic's cues. Unknown cues play nothing.
+  public playComicCue(cue: string): void {
+    switch (cue) {
+      case 'thunder': this.audio.playThunder(0.3); break;        // distant rumble
+      case 'tv': this.audio.playTVAudio(); break;                // muffled low murmur
+      case 'click': this.audio.playLampClick(); break;           // door / lock click
+      case 'heartbeat': this.audio.playHeartbeatPulse(0.5); break;
+    }
+  }
+
   public playSiren(): void {
     this.audio.playSiren();
   }

@@ -70,6 +70,12 @@ const VISITORS: Record<string, VisitorInfo> = {
 export class GameFlow {
   public phase: GamePhase = GamePhase.TITLE;
   public isPaused: boolean = false;
+
+  // The pause overlay opened or closed
+  public setPaused(paused: boolean): void {
+    this.isPaused = paused;
+    this.comic?.setPaused(paused);
+  }
   
   private scene: THREE.Scene;
   private house: House;
@@ -79,8 +85,8 @@ export class GameFlow {
   private hud: HUD;
   private npcManager: NpcManager;
   private visitorManager: VisitorManager;
-  private montage: ComicPlayer | null = null;
-  private hasPlayedMontage = false;
+  private comic: ComicPlayer | null = null;
+  private comicDone = false; // set by the comic's onDone; acted on in update() so the handoff follows the game clock
   
   private phaseTimer: number = 0;
   private knockTimer: number = 0;
@@ -128,6 +134,9 @@ export class GameFlow {
     this.blockInput = false;
     this.isPowerOn = true;
     this.forcedEntryTimer = -1;
+    this.fadeTimer = -1;
+    this.nextPhasePending = false;
+    this.disposeComic(); // Play Again: the comic plays again from the start
     
     this.evidence.reset();
     this.visitorManager.dismissVisitor();
@@ -165,23 +174,32 @@ export class GameFlow {
     this.fadeTimer = 0.6;
   }
 
+  private startComic(): void {
+    this.disposeComic();
+    const comic = new ComicPlayer(document.body, {
+      onCue: (cue) => SoundManager.getInstance().playComicCue(cue),
+      onDone: () => {
+        if (this.comic === comic) this.comicDone = true;
+      }
+    });
+    this.comic = comic;
+    if (this.isPaused) comic.setPaused(true);
+  }
+
+  private disposeComic(): void {
+    this.comic?.dispose();
+    this.comic = null;
+    this.comicDone = false;
+  }
+
   private doPhaseSetup(): void {
     const oldPhase = this.phase;
+    if (oldPhase === GamePhase.MONTAGE) this.disposeComic();
     switch (this.phase) {
       case GamePhase.TITLE:
         this.phase = GamePhase.MONTAGE;
         document.getElementById('title-screen')?.classList.add('hidden');
-        
-          if (this.hasPlayedMontage) {
-              this.advancePhase();
-              return;
-          }
-          this.hasPlayedMontage = true;
-          this.montage = new ComicPlayer((startingParanoia: number) => {
-          this.paranoia = startingParanoia;
-          this.advancePhase();
-        });
-        this.montage.start();
+        this.startComic();
         break;
       case GamePhase.MONTAGE:
         this.phase = GamePhase.ACT1_INTRO;
@@ -333,7 +351,12 @@ export class GameFlow {
     }
     if (this.phase === GamePhase.TITLE) return;
     if (this.phase === GamePhase.MONTAGE) {
-      if (this.montage) this.montage.update(delta);
+      if (this.comicDone) {
+        this.comicDone = false;
+        this.advancePhase(); // -> ACT1_INTRO
+      } else {
+        this.comic?.update(delta);
+      }
       return;
     }
     

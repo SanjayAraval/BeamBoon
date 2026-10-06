@@ -29,10 +29,10 @@ code. See [CREDITS.md](CREDITS.md).
 | Mouse wheel | Cycle weapons |
 | `F` | Flashlight on/off |
 | `E`, `Q` or right click | Leave the peephole |
-| `Esc` | Pause menu (Resume, Settings, Restart) |
+| `Esc` | Pause menu (Resume, Settings, Restart), also during the opening comic |
 | `R` twice | Restart |
-| Click / `Space` | Opening comic: next panel / next page |
-| Hold `Enter` | Skip the opening comic |
+| Click / `Space` / `Enter` | Opening comic: next panel |
+| Hold `Enter` (or `Space`) | Skip the opening comic |
 | Hold `Space` | Skip the sofa intro |
 
 Debug keys (only with `?debug=1` in the URL): `N` next phase, `F3` debug overlay,

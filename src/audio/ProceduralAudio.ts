@@ -128,6 +128,14 @@ export class ProceduralAudio {
     this.heartbeatTimer = window.setTimeout(this.scheduleHeartbeatPulse, intervalMs);
   };
 
+  // A single quiet lub-dub, without starting the heartbeat loop
+  public playHeartbeatPulse(volume = 0.5): void {
+    if (!this.ctx || !this.masterGain) return;
+    const now = this.ctx.currentTime;
+    this.playThump(now, 65, 0.12, 0.8 * volume);
+    this.playThump(now + 0.14, 50, 0.1, 0.5 * volume);
+  }
+
   private playThump(time: number, freq: number, duration: number, vol: number): void {
     if (!this.ctx || !this.masterGain) return;
 
