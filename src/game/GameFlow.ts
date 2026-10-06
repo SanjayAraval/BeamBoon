@@ -476,6 +476,7 @@ export class GameFlow {
         this.npcManager.killParents();
         if (this.onParentsShot) this.onParentsShot();
         SoundManager.getInstance().playGunshot();
+        SoundManager.getInstance().playSting();
         const bangOverlay = document.getElementById('bang-overlay');
         if (bangOverlay) bangOverlay.classList.remove('hidden');
         
@@ -711,6 +712,7 @@ export class GameFlow {
           
           // Add paranoia burst
           this.applyParanoia(3, 'lightning');
+          SoundManager.getInstance().playThunder(0.4 + Math.random() * 0.5); // near or far, at random
         } else {
           // End lightning flash
           this.isLightning = false;

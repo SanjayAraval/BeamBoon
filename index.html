@@ -105,8 +105,8 @@
       
       <div class="setting-row">
         <label for="slider-volume">Master Volume</label>
-        <input type="range" id="slider-volume" min="0" max="100" value="80">
-        <span id="val-volume">80%</span>
+        <input type="range" id="slider-volume" min="0" max="100" value="60">
+        <span id="val-volume">60%</span>
       </div>
 
       <div class="setting-row">
@@ -140,6 +140,7 @@
   </div>
 
   <!-- HUD Overlay -->
+  <div id="audio-status" class="audio-status" title="Sound on (M)" aria-label="Sound: press M to mute">🔊</div>
   <div id="hud" class="hud-container hidden">
     <!-- Objective Caption -->
       <div id="objective-caption" class="comic-panel hidden" style="position: absolute; top: 10%; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.5s ease-in-out; text-align: center; z-index: 50;">

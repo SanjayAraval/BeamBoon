@@ -613,3 +613,23 @@ html, body {
   display: flex;
   justify-content: space-between;
 }
+
+/* Speaker icon, top right, always visible: M mutes */
+.audio-status {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 9000;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid var(--comic-border);
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.8;
+}
+.audio-status.muted {
+  opacity: 1;
+  filter: grayscale(1);
+}

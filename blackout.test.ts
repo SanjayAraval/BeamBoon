@@ -174,7 +174,8 @@ console.log('--- RUNNING BLACKOUT NAVIGATION TEST ---');
   check('Search aids off at once', !drawerLit(d) && lm(d).getGuideLights().every((x: any) => x.intensity === 0));
   const s = sampleLightning(d, 45);
   const g = gaps(s.starts);
-  check('After the flashlight: flashes 8 to 15s apart again', g.every(x => x >= 8 - 0.05 && x <= 15 + 0.35), g.map(x => x.toFixed(2)).join(', ') || `starts ${s.starts.map(x => x.toFixed(2)).join(', ')}`);
+  // 8-15s plus the 0.3s flash; + 0.6s if the phase-change fade (the lightning clock stops) falls in the gap
+  check('After the flashlight: flashes 8 to 15s apart again', g.every(x => x >= 8 - 0.05 && x <= 15 + 0.3 + 0.6 + 0.05), g.map(x => x.toFixed(2)).join(', ') || `starts ${s.starts.map(x => x.toFixed(2)).join(', ')}`);
   check('After the flashlight: 0.3s flashes, and no search flash lighting', s.lengths.every(l => Math.abs(l - 0.3) < 0.06) && s.peak === 0, `${s.lengths.join(', ')} peak ${s.peak}`);
 }
 

@@ -8,7 +8,7 @@ import { PostProcessing } from '../render/PostProcessing';
 import { SoundManager } from '../audio/SoundManager';
 import { Narration } from '../story/Narration';
 import { GameFlow, GamePhase } from './GameFlow';
-import { EndingData } from '../story/Endings';
+import { EndingData, EndingType } from '../story/Endings';
 import { HUD } from '../ui/HUD';
 import { TitleScreen } from '../ui/TitleScreen';
 import { PauseMenu } from '../ui/PauseMenu';
@@ -101,6 +101,7 @@ export class Game {
   private raycaster = new THREE.Raycaster();
   private clock: FrameClock;
   private gameTime = 0;
+  private endingType: EndingType | null = null; // which ending cue the score plays
   private lastRestartPress = 0;
   private lastFleePress = 0;
 
@@ -139,6 +140,7 @@ export class Game {
 
     // UI Modules
     this.hud = new HUD();
+    this.hud.updateMute(this.soundManager.isMuted());
     this.peepholeUI = new PeepholeUI();
     this.peepholeManager = new PeepholeManager(this.player, this.peepholeUI);
     this.interactionSystem = new InteractionSystem(this.scene, this.hud);
@@ -180,7 +182,7 @@ export class Game {
       colliders: this.house.collisionBoxes,
       isSpotLit: (x, z, floor) => this.gameFlow.isSpotLit(x, z, floor),
       isLampOnNear: (point, radius) => this.isLampOnNear(point, radius),
-      onAppear: () => this.soundManager.playBreath()
+      onAppear: () => this.soundManager.playBreath() // the shadow's whisper
     });
     // The shot is fired with Dad's service pistol whether or not the player fetched it first
     this.gameFlow.onParentsShot = () => {
@@ -258,6 +260,7 @@ export class Game {
             this.arsenal.unlockPistol();
             this.evidence.setPistolHidden(false);
             this.gameFlow.takeGun();
+            this.soundManager.playPickup();
             ComicOverlays.popOnomatopoeia('SERVICE PISTOL!', 50, 50);
           }
           this.hud.updateWeapon(this.arsenal.getWeapon(), this.arsenal.getPistolAmmo());
@@ -299,7 +302,7 @@ export class Game {
           interactFn = () => {
             door.isOpen = !door.isOpen;
             ComicOverlays.popOnomatopoeia(door.isOpen ? 'CREAK...' : 'SLAM', 50, 50);
-            this.soundManager.playLampClick();
+            this.soundManager.playDoorCreak(door.isOpen);
           };
         }
       } else if (type === 'switch' || type === 'tv' || type.startsWith('lamp')) {
@@ -529,7 +532,7 @@ export class Game {
           this.gameFlow.takeFlashlight();
           if (this.drawerFlashlight) this.drawerFlashlight.visible = false;
           this.player.setFlashlight(true);
-          this.soundManager.playLampClick();
+          this.soundManager.playPickup();
           ComicOverlays.popOnomatopoeia('FLASHLIGHT!', 50, 50);
         } else {
           this.setDrawerOpen(false);
@@ -543,7 +546,7 @@ export class Game {
     this.drawerOpen = open;
     this.drawer.position.z += open ? 0.35 : -0.35;
     this.drawer.updateMatrixWorld(true);
-    this.soundManager.playLampClick();
+    this.soundManager.playDrawer(open);
   }
 
   // While "Find the flashlight" is the objective: moonlight, night-lights, longer lightning (LightManager)
@@ -859,6 +862,7 @@ export class Game {
     if (!session || session.finished || this.gameFlow.isPaused) return;
     const result = session.answer(index, this.gameFlow.paranoia);
     if (!result) return;
+    this.soundManager.playUiTick();
     if (result.paranoiaChange !== 0) this.gameFlow.addParanoia(result.paranoiaChange, 'dialogue');
     this.dialogueUI.setDoubt(session.doubt);
     this.dialogueUI.setReply(`"${result.reply}"`);
@@ -945,11 +949,13 @@ export class Game {
   private pause(): void {
     this.shadows.clear();
     this.gameFlow.setPaused(true);
+    this.soundManager.setPaused(true);
     this.pauseMenu.show();
   }
 
   private resume(): void {
     this.gameFlow.setPaused(false);
+    this.soundManager.setPaused(false);
     this.pauseMenu.hide();
     this.clock.getDelta(); // don't feed the paused time into the next frame
   }
@@ -1052,6 +1058,7 @@ export class Game {
   }
 
   private triggerEnding(ending: EndingData): void {
+    this.endingType = ending.type;
     this.dropBody();
     this.closeDialogue();
     this.shadows.clear();
@@ -1122,6 +1129,10 @@ export class Game {
     });
 
     window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyM' && !e.repeat) {
+        this.hud.updateMute(this.soundManager.toggleMute());
+        return;
+      }
       // During the comic and the door dialogue the pointer is not locked, so Esc arrives as a key
       // press: toggle pause
       if (e.code === 'Escape' && (this.gameFlow.phase === GamePhase.MONTAGE || this.dialogue)) {
@@ -1412,6 +1423,14 @@ export class Game {
       // Shadows first, so their paranoia shares GameFlow's per-second cap this frame
       const shadowParanoia = this.shadows.update(delta, this.shadowFrame());
       this.gameFlow.update(delta, this.flashlight.isTurnedOn(), time, shadowParanoia);
+      if (this.gameFlow.phase !== GamePhase.ENDING) this.endingType = null;
+      this.soundManager.updateMusic(delta, {
+        phase: this.gameFlow.phase,
+        paranoia: this.gameFlow.paranoia,
+        visitorAtDoor: this.gameFlow.getVisitorManager().isVisitorAtDoor(),
+        inDialogue: this.dialogue !== null,
+        ending: this.endingType
+      });
       if (this.isInGame()) this.updateTaskList();
       this.updateObjectiveLine();
 

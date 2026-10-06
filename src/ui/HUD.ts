@@ -57,6 +57,15 @@ export class HUD {
     if (this.paranoiaVal) this.paranoiaVal.innerText = `${round}%`;
   }
 
+  // The speaker icon (M toggles it)
+  public updateMute(muted: boolean): void {
+    const el = document.getElementById('audio-status');
+    if (!el) return;
+    el.innerText = muted ? '\u{1F507}' : '\u{1F50A}';
+    el.title = muted ? 'Sound off (M)' : 'Sound on (M)';
+    el.classList.toggle('muted', muted);
+  }
+
   public updateFlashlight(isOn: boolean): void {
     if (this.flashlightStatus) {
       this.flashlightStatus.innerText = isOn ? 'ON' : 'OFF';
