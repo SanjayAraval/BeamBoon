@@ -90,6 +90,7 @@ export class GameFlow {
   public blockInput: boolean = false;
   public isPowerOn: boolean = true;
   private visitorGoneTimer = 0;
+  private forcedEntryTimer = -1; // counts down (game time) to a visitor pushing inside
 
   // Fired when the parents go down, so the player always ends up holding the pistol that did it
   public onParentsShot?: () => void;
@@ -126,6 +127,7 @@ export class GameFlow {
     this.paranoia = 0;
     this.blockInput = false;
     this.isPowerOn = true;
+    this.forcedEntryTimer = -1;
     
     this.evidence.reset();
     this.visitorManager.dismissVisitor();
@@ -547,6 +549,15 @@ export class GameFlow {
       case GamePhase.VISITOR_NEIGHBOUR:
       case GamePhase.VISITOR_OFFICER:
       case GamePhase.VISITOR_PARTNER: {
+        if (this.forcedEntryTimer >= 0) {
+          this.forcedEntryTimer -= delta;
+          if (this.forcedEntryTimer <= 0) {
+            this.forcedEntryTimer = -1;
+            this.forceEntry();
+            return;
+          }
+          break;
+        }
         const visitor = this.visitorManager.getActiveVisitor();
         if (visitor) {
           this.knockTimer += delta;
@@ -589,8 +600,16 @@ export class GameFlow {
     if (parent) parent.character.root.visible = false;
   }
 
+  // The visitor stopped listening and pushes inside after a short delay. Counted in game
+  // time, so the door doesn't burst open while the game is paused.
+  public scheduleForcedEntry(delaySeconds: number): void {
+    if (this.phase < GamePhase.VISITOR_NEIGHBOUR || this.phase >= GamePhase.FINAL_INSPECTION) return;
+    this.forcedEntryTimer = delaySeconds;
+  }
+
   // A visitor pushes inside: the house gets inspected right now
   public forceEntry(): void {
+    this.forcedEntryTimer = -1;
     if (this.phase < GamePhase.VISITOR_NEIGHBOUR || this.phase >= GamePhase.ENDING) return;
     this.visitorManager.dismissVisitor();
     this.phase = GamePhase.FINAL_INSPECTION;
