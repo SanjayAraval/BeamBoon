@@ -38,6 +38,14 @@ export class LightManager {
   private brightnessScalar = 1.0;
   private phaseHemiColor = 0x223044;
 
+  // Blackout before the flashlight is found: cold moonlight, longer lightning, and a trail of
+  // night-lights from the stairs to the player's bedroom (kept out of `lights`: they light no room)
+  private searchAids = false;
+  private lightningFlash = 0; // 0..1, eased toward the flash state
+  private lightningOn = false;
+  private moonPlanes: THREE.Mesh[] = [];
+  private guideLights: { id: string; light: THREE.PointLight; glow: THREE.Mesh }[] = [];
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     
@@ -61,6 +69,50 @@ export class LightManager {
     
     this.initLights();
     this.initMoonlight();
+    this.initGuideLights();
+  }
+
+  // Warm plug-in night-lights: foot of the stairs, top of the stairs, upstairs hall, and a glow
+  // over the player's bedroom doorway (hall side). Always in the scene so the light count never changes.
+  private initGuideLights() {
+    const spots: { id: string; pos: THREE.Vector3; size: number }[] = [
+      { id: 'stairs_bottom', pos: new THREE.Vector3(9.93, 0.35, 11.75), size: 0.06 },
+      { id: 'stairs_landing', pos: new THREE.Vector3(9.93, 3.35, 6.6), size: 0.06 },
+      { id: 'upstairs_hall', pos: new THREE.Vector3(6.07, 3.35, 4.3), size: 0.06 },
+      { id: 'bedroom_door', pos: new THREE.Vector3(6.1, 5.2, 2.5), size: 0.08 }
+    ];
+    for (const s of spots) {
+      const light = new THREE.PointLight(0xffaa55, 0, 3.0, 2);
+      light.castShadow = false;
+      light.position.copy(s.pos);
+      this.scene.add(light);
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(s.size, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffb060 }));
+      glow.position.copy(s.pos);
+      glow.visible = false;
+      glow.name = 'guide_' + s.id;
+      this.scene.add(glow);
+      this.guideLights.push({ id: s.id, light, glow });
+    }
+  }
+
+  public setSearchAids(on: boolean): void {
+    this.searchAids = on;
+    for (const g of this.guideLights) g.glow.visible = on;
+    if (!on) for (const g of this.guideLights) g.light.intensity = 0;
+    for (const m of this.moonPlanes) (m.material as THREE.MeshBasicMaterial).opacity = on ? 0.2 : 0.08;
+  }
+
+  public setLightning(on: boolean): void {
+    this.lightningOn = on;
+  }
+
+  // For tests: which night-lights are lit right now
+  public getGuideLights(): { id: string; intensity: number; glowVisible: boolean; position: THREE.Vector3 }[] {
+    return this.guideLights.map(g => ({ id: g.id, intensity: g.light.intensity, glowVisible: g.glow.visible, position: g.light.position.clone() }));
+  }
+
+  public getLightningLevel(): number {
+    return this.lightningFlash;
   }
 
   private initLights() {
@@ -127,6 +179,7 @@ export class LightManager {
     
     for (const win of houseLayout.windows) {
       const plane = new THREE.Mesh(new THREE.PlaneGeometry(3, 4), mat);
+      this.moonPlanes.push(plane);
       plane.rotation.x = -Math.PI / 2;
       const y = win.floor === 1 ? 3.01 : 0.01;
       
@@ -288,6 +341,30 @@ export class LightManager {
     } else {
       this.ambientLight.intensity = base;
       this.hemiLight.color.setHex(this.phaseHemiColor);
+    }
+    this.hemiLight.intensity = this.baseHemi;
+    this.ambientLight.color.setHex(0xffffff);
+
+    // The flashlight search: cold moonlight lifts the floor just enough to read outlines up close,
+    // and a lightning flash lights the whole floor for a moment (fast attack, quick fade)
+    this.lightningFlash += ((this.lightningOn ? 1 : 0) - this.lightningFlash) * Math.min(delta * (this.lightningOn ? 30 : 12), 1);
+    if (this.lightningFlash < 0.001) this.lightningFlash = 0;
+    if (this.searchAids) {
+      const moon = 0x8aa4d6;
+      this.ambientLight.color.setHex(moon);
+      this.ambientLight.intensity = Math.max(this.ambientLight.intensity, 0.14 * this.brightnessScalar);
+      this.hemiLight.color.setHex(0x3a5a8c);
+      this.hemiLight.intensity = 0.3 * this.brightnessScalar;
+      if (this.lightningFlash > 0) {
+        this.ambientLight.color.lerp(new THREE.Color(0xdde8ff), this.lightningFlash);
+        this.ambientLight.intensity += 1.4 * this.lightningFlash * this.brightnessScalar;
+        this.hemiLight.intensity += 1.6 * this.lightningFlash * this.brightnessScalar;
+      }
+      // Night-lights breathe very slightly, like cheap bulbs
+      for (const g of this.guideLights) {
+        const flick = 1 + 0.08 * Math.sin(this.time * 2.3 + g.light.position.z);
+        g.light.intensity = (g.id === 'bedroom_door' ? 0.5 : 0.35) * flick;
+      }
     }
     
     // Calculate allowed lights (top 6 closest ON lights)

@@ -42,6 +42,11 @@ export function getVisionMode(character: Character, paranoia: number, isLightnin
 export const ACT1_MIN_BLACKOUT = 20;       // the door never unlocks sooner than this after the blackout
 export const ACT1_DOOR_UNLOCK_PAUSE = 1.5; // the key turns... then the comic
 export const ACT1_FLASHLIGHT_HINT_AFTER = 90;
+export const ACT1_FLASHLIGHT_GLOW_HINT_AFTER = 30; // the first, gentler hint: follow the night-lights
+// Lightning while the flashlight is still in the drawer: a flash every 5 to 8 s (start to start), 0.4 s long
+export const SEARCH_LIGHTNING_FLASH = 0.4;
+export const SEARCH_LIGHTNING_MIN_INTERVAL = 5;
+export const SEARCH_LIGHTNING_MAX_INTERVAL = 8;
 export const ACT1_GUN_HINT_AFTER = 120;
 export const ACT1_SHOOT_RANGE = 3.5;       // with the gun, on the ground floor, this close to a parent
 // Where the gun is (the gun safe in the master bedroom's walk-in closet): door comic caption and hint
@@ -692,24 +697,30 @@ export class GameFlow {
       }
     }
 
-    // Lightning System
+    // Lightning System (more often and longer while the player searches the dark for the flashlight)
     if (this.phase >= GamePhase.ACT1_MOVIE && this.phase <= GamePhase.FINAL_INSPECTION) {
+      const search = this.isFlashlightSearch();
+      const searchGap = SEARCH_LIGHTNING_MAX_INTERVAL - SEARCH_LIGHTNING_FLASH;
+      if (search && !this.isLightning && this.lightningTimer > searchGap) this.lightningTimer = searchGap;
       this.lightningTimer -= delta;
       if (this.lightningTimer <= 0) {
         if (!this.isLightning) {
           // Trigger lightning flash
           this.isLightning = true;
-          this.lightningTimer = 0.3; // Flash duration
+          this.lightningTimer = search ? SEARCH_LIGHTNING_FLASH : 0.3; // Flash duration
           
           // Add paranoia burst
           this.applyParanoia(3, 'lightning');
         } else {
           // End lightning flash
           this.isLightning = false;
-          this.lightningTimer = 8 + Math.random() * 7; // 8 to 15 seconds
+          this.lightningTimer = search
+            ? SEARCH_LIGHTNING_MIN_INTERVAL - SEARCH_LIGHTNING_FLASH + Math.random() * (SEARCH_LIGHTNING_MAX_INTERVAL - SEARCH_LIGHTNING_MIN_INTERVAL)
+            : 8 + Math.random() * 7; // 8 to 15 seconds
         }
       }
     }
+    this.house.lightManager.setLightning(this.isLightning && this.isFlashlightSearch());
     
     // Paranoia updates: a lit room calms you down, the flashlight only slows the dread
     const playerPos = this.player.getPosition();
@@ -783,9 +794,12 @@ export class GameFlow {
           this.narration.showCaption('Click. A key turns in the front door.', 2.5);
           this.setObjective(OBJECTIVES.doorUnlocks);
           this.doorUnlockTimer = ACT1_DOOR_UNLOCK_PAUSE;
-        } else if (!this.hasFlashlight && this.phaseTimer >= ACT1_FLASHLIGHT_HINT_AFTER && !this.objectiveHint) {
+        } else if (!this.hasFlashlight && this.phaseTimer >= ACT1_FLASHLIGHT_HINT_AFTER && this.objectiveHint !== OBJECTIVES.flashlightHint) {
           this.objectiveHint = OBJECTIVES.flashlightHint;
           this.narration.showCaption(OBJECTIVES.flashlightHint, 4.0);
+        } else if (!this.hasFlashlight && this.phaseTimer >= ACT1_FLASHLIGHT_GLOW_HINT_AFTER && !this.objectiveHint) {
+          this.objectiveHint = OBJECTIVES.flashlightGlowHint;
+          this.narration.showCaption(OBJECTIVES.flashlightGlowHint, 4.0);
         }
         break;
       case GamePhase.ACT1_ARRIVAL: {
@@ -958,6 +972,15 @@ export class GameFlow {
       this.objectiveHint = '';
       this.setObjective(OBJECTIVES.goDownstairs);
     }
+  }
+
+  // The "Find the flashlight" objective is active: the blackout navigation aids are on
+  public isFlashlightSearch(): boolean {
+    return this.phase === GamePhase.ACT1_BLACKOUT && !this.hasFlashlight;
+  }
+
+  public isLightningFlash(): boolean {
+    return this.isLightning;
   }
 
   public isAct1ComicPlaying(): boolean {

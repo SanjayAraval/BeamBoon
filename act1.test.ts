@@ -57,7 +57,7 @@ console.log('--- RUNNING ACT 1 FLOW TEST ---');
   check('From the first frame of the blackout the objective says where: desk drawer, your bedroom, upstairs', objective(d).text === OBJECTIVES.findFlashlight && line() === OBJECTIVES.findFlashlight, line());
   d.placePlayer(4.5, 1.5, 0); // the kitchen, far from the drawer
   d.run(ACT1_FLASHLIGHT_HINT_AFTER - 2);
-  check(`No hint before ${ACT1_FLASHLIGHT_HINT_AFTER}s`, objective(d).hint === '');
+  check(`Before ${ACT1_FLASHLIGHT_HINT_AFTER}s only the gentle "follow the glow" hint`, objective(d).hint === OBJECTIVES.flashlightGlowHint, objective(d).hint);
   d.run(3);
   check(`After ${ACT1_FLASHLIGHT_HINT_AFTER}s: a stronger hint with directions (on screen)`, objective(d).hint === OBJECTIVES.flashlightHint && line().includes(OBJECTIVES.flashlightHint) && (OBJECTIVES.flashlightHint as string) !== OBJECTIVES.findFlashlight);
   d.run(60);

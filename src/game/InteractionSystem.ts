@@ -90,6 +90,7 @@ export class InteractionSystem {
     let size = 0.5; // default lamp size
     if (interactable.id.includes('switch') || interactable.id.includes('peephole')) size = 0.25;
     if (interactable.id.includes('door') || interactable.id.includes('closet')) size = 1.0;
+    if (interactable.id === 'drawer_player') size = 0.8; // found in the dark: no need to aim at the exact spot
 
     const geo = new THREE.BoxGeometry(size, size, size);
     const mat = new THREE.MeshBasicMaterial({ visible: false, depthTest: false }); // invisible

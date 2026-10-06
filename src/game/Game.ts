@@ -29,6 +29,7 @@ import { DRAG_SPEED_FACTOR, DRAG_NOISE_PER_METER, findDropZone, trailPosition } 
 const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).get('debug') === '1';
 const FRONT_DOOR = new THREE.Vector3(7.4, 0, 12.0);
 const DOOR_REACH = 2.5; // how close the player must be to the front door to talk / strike
+export const DRAWER_PROMPT_REACH = 2.5; // the flashlight drawer prompt shows from this far
 const CONFIRM_WINDOW = 2000; // ms to press a key again to confirm (restart, flee)
 
 // Hiding spot in the walk-in closet: hiding is offered just inside its door, and the view
@@ -497,6 +498,8 @@ export class Game {
   private drawer: THREE.Mesh | null = null;
   private drawerFlashlight: THREE.Mesh | null = null;
   private drawerOpen = false;
+  private drawerGlow: THREE.PointLight | null = null; // soft pulse while the flashlight is still inside
+  private searchAidsOn = false;
 
   private registerFlashlightDrawer(): void {
     const desk = propsLayout.find(p => p.id === 'desk_player')!;
@@ -510,9 +513,13 @@ export class Game {
     this.drawerFlashlight.rotation.z = Math.PI / 2;
     this.drawerFlashlight.position.set(0, 0.09, 0);
     this.drawer.add(this.drawerFlashlight);
+    this.drawerGlow = new THREE.PointLight(0xffb060, 0, 1.6, 2);
+    this.drawerGlow.position.set(desk.x, top - 0.05, front + 0.25);
+    this.scene.add(this.drawerGlow);
 
     this.interactionSystem.register({
       id: 'drawer_player',
+      maxDistance: DRAWER_PROMPT_REACH, // found in the dark without aiming at the exact spot
       position: new THREE.Vector3(desk.x, top - 0.12, front + 0.15),
       promptText: () => !this.drawerOpen ? 'Open drawer' : !this.gameFlow.hasFlashlight ? 'Take flashlight' : 'Close drawer',
       onInteract: () => {
@@ -537,6 +544,28 @@ export class Game {
     this.drawer.position.z += open ? 0.35 : -0.35;
     this.drawer.updateMatrixWorld(true);
     this.soundManager.playLampClick();
+  }
+
+  // While "Find the flashlight" is the objective: moonlight, night-lights, longer lightning (LightManager)
+  // and a slow warm pulse on the drawer. All of it goes away once the flashlight is taken.
+  private updateSearchAids(): void {
+    const on = this.gameFlow.isFlashlightSearch();
+    if (on !== this.searchAidsOn) {
+      this.searchAidsOn = on;
+      this.house.lightManager.setSearchAids(on);
+    }
+    const mat = this.drawer?.material as THREE.MeshStandardMaterial | undefined;
+    const pulse = on ? 0.5 + 0.5 * Math.sin(this.gameTime * 2.4) : 0;
+    if (mat) {
+      mat.emissive.setHex(on ? 0xffa040 : 0x000000);
+      mat.emissiveIntensity = on ? 0.15 + 0.35 * pulse : 1;
+    }
+    if (this.drawerGlow) this.drawerGlow.intensity = on ? 0.15 + 0.25 * pulse : 0;
+  }
+
+  public isDrawerHighlighted(): boolean {
+    const mat = this.drawer?.material as THREE.MeshStandardMaterial | undefined;
+    return !!this.drawerGlow && this.drawerGlow.intensity > 0 && !!mat && mat.emissive.getHex() !== 0;
   }
 
   private resetFlashlightDrawer(): void {
@@ -1393,6 +1422,7 @@ export class Game {
         });
 
         this.house.updateDoors(delta);
+        this.updateSearchAids();
         this.house.lightManager.update(delta, this.gameFlow.paranoia, this.player.getPosition());
 
         this.flashlight.update(delta, this.gameFlow.paranoia);

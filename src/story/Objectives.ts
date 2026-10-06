@@ -10,6 +10,7 @@ export const OBJECTIVES = {
   // Act 1
   movie: 'Home alone. Storm outside. Stay calm.',
   findFlashlight: 'Find the flashlight: check the desk drawer in your bedroom, upstairs.',
+  flashlightGlowHint: 'Follow the glow: stairs, then the first door on your left.',
   flashlightHint: 'Your bedroom is upstairs: at the top of the stairs keep straight, first door on your left.',
   waitListen: 'Wait. Listen.',
   doorUnlocks: 'Someone is at the front door',
