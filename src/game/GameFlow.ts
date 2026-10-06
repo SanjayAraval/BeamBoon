@@ -43,11 +43,13 @@ export const ACT1_DOOR_UNLOCK_PAUSE = 1.5; // the key turns... then the comic
 export const ACT1_FLASHLIGHT_HINT_AFTER = 90;
 export const ACT1_GUN_HINT_AFTER = 120;
 export const ACT1_SHOOT_RANGE = 3.5;       // with the gun, on the ground floor, this close to a parent
+// Where the gun is (the gun safe in the master bedroom's walk-in closet): door comic caption and hint
+export const ACT1_GUN_LOCATION_TEXT = 'Dad keeps his gun in the master bedroom.';
 // Placeholder art (scenes from the intro comic) until the real panels arrive
 export const ACT1_ARRIVAL_PAGES: PageDef[] = [
   { layout: 'stagger', panels: [
     { scene: 8, sfx: { text: 'CLICK-CLACK', x: 50, y: 30, rot: -6, size: 60, color: 'yellow' }, cue: 'click', dur: 4.2, motion: 'in', origin: '60% 55%' },
-    { scene: 2, caption: "Dad's gun is in the master bedroom drawer.", cue: 'heartbeat', dur: 5.0, motion: 'left', origin: '55% 45%' }
+    { scene: 2, caption: ACT1_GUN_LOCATION_TEXT, cue: 'heartbeat', dur: 5.0, motion: 'left', origin: '55% 45%' }
   ] }
 ];
 
@@ -751,8 +753,8 @@ export class GameFlow {
         if (this.hasGun && near) {
           this.advancePhase();
         } else if (!this.hasGun && this.phaseTimer >= ACT1_GUN_HINT_AFTER && !this.objectiveHint) {
-          this.objectiveHint = "Dad's gun is in the master bedroom";
-          this.narration.showCaption("Dad's gun is in the master bedroom.", 4.0);
+          this.objectiveHint = ACT1_GUN_LOCATION_TEXT;
+          this.narration.showCaption(ACT1_GUN_LOCATION_TEXT, 4.0);
         }
         break;
       }

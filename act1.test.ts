@@ -3,7 +3,7 @@
 
 import { resetHeadless, isHidden, losePointerLock, comicRoot, elementText, keyDown, keyUp, pointerLockStats } from './test-support/headless';
 import { Driver } from './test-support/driver';
-import { GamePhase, ACT1_MIN_BLACKOUT, ACT1_FLASHLIGHT_HINT_AFTER, ACT1_GUN_HINT_AFTER } from './src/game/GameFlow';
+import { GamePhase, ACT1_MIN_BLACKOUT, ACT1_FLASHLIGHT_HINT_AFTER, ACT1_GUN_HINT_AFTER, ACT1_ARRIVAL_PAGES } from './src/game/GameFlow';
 
 let pass = 0;
 let fail = 0;
@@ -120,7 +120,10 @@ console.log('--- RUNNING ACT 1 FLOW TEST ---');
   d.run(ACT1_GUN_HINT_AFTER - 30 - 2);
   check(`No gun hint before ${ACT1_GUN_HINT_AFTER}s`, objective(d).hint === '');
   d.run(4);
-  check(`After ${ACT1_GUN_HINT_AFTER}s: hint "Dad's gun is in the master bedroom"`, objective(d).hint === "Dad's gun is in the master bedroom");
+  check(`After ${ACT1_GUN_HINT_AFTER}s: hint "Dad keeps his gun in the master bedroom."`, objective(d).hint === 'Dad keeps his gun in the master bedroom.');
+  const captions = ACT1_ARRIVAL_PAGES.flatMap(p => p.panels.map(x => x.caption ?? ''));
+  check('Door comic caption says where the gun really is (no drawer)', captions.includes('Dad keeps his gun in the master bedroom.') && !captions.some(c => /drawer/i.test(c)));
+  check('No gun objective or hint mentions a drawer', !/drawer/i.test(objective(d).text + objective(d).hint));
   check('No soft lock: still the arrival, both parents alive, no ending', d.phase === GamePhase.ACT1_ARRIVAL && parents(d).length === 2 && parents(d).every(p => p.isDead === false) && isHidden('ending-screen'));
 
   check('Takes the gun: "[E] Take gun"', d.approach('gun_safe') && elementText('interaction-text') === '[E] Take gun' && (d.press('KeyE'), d.flow.hasGun));
