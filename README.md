@@ -70,8 +70,8 @@ the four endings (`npm run test:e2e`).
 
 **Packet Loss**
 
-- <name 1>
-- <name 2>
-- <name 3>
-- <name 4>
-- <name 5>
+- Sanjay Araval (lead)
+- Praneeth Koneru
+- Prajval Kataboina
+- Varenya Mulugu
+- Varenya Vadrevu
