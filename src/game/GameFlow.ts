@@ -597,6 +597,13 @@ export class GameFlow {
     this.checkEnding();
   }
 
+  // Noise only counts once the cover-up starts: a nervous miss during the Act 1
+  // zombie scene happens before anyone is listening and must not cost the CLEAN ending
+  public recordNoise(amount: number): void {
+    if (this.phase < GamePhase.ACT2_COVERUP || this.phase >= GamePhase.ENDING) return;
+    this.evidence.addNoise(amount);
+  }
+
   public handlePlayerAttack(): void {
     if (this.phase === GamePhase.ACT1_ARRIVAL) {
       this.advancePhase(); // Transition to shooting

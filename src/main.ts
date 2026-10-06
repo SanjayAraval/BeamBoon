@@ -623,7 +623,7 @@ class Game {
       if (document.pointerLockElement === null) return;
 
       const weapon = this.arsenal.getWeapon();
-      const result = this.arsenal.attack((noise) => this.evidence.addNoise(noise));
+      const result = this.arsenal.attack((noise) => this.gameFlow.recordNoise(noise));
       this.hud.updateWeapon(this.arsenal.getWeapon(), this.arsenal.getPistolAmmo());
       if (!result.hit) return;
 
