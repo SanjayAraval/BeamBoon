@@ -7,7 +7,8 @@ import { GamePhase } from './src/game/GameFlow';
 import { Evidence } from './src/core/Evidence';
 import {
   DIALOGUES, DialogueSession, VisitorType, startingDoubt, answerDoubt, bestAnswer, worstAnswer,
-  DOUBT_FAIL, DOUBT_PASS_BELOW, DOUBT_START_MAX, LIE_HIGH_SEVERITY_DOUBT, NERVOUS_DOUBT, CALM_BONUS, ANSWER_PARANOIA
+  DOUBT_FAIL, DOUBT_PASS_BELOW, DOUBT_START_MAX, DOUBT_START_MAX_HIGH_SEVERITY, startingDoubtCap,
+  LIE_HIGH_SEVERITY_DOUBT, NERVOUS_DOUBT, CALM_BONUS, ANSWER_PARANOIA
 } from './src/game/VisitorDialogue';
 
 let pass = 0;
@@ -23,11 +24,12 @@ console.log('--- RUNNING DIALOGUE TEST ---');
 
 // 1. Starting doubt from the real evidence values --------------------------------------------
 check('Starting doubt: 10 + 35*severity + 30*suspicion', near(startingDoubt(0, 0), 10) && near(startingDoubt(0.5, 0.2), 33.5) && near(startingDoubt(0.2, 0.5), 32));
-check(`Starting doubt is clamped to ${DOUBT_START_MAX}`, startingDoubt(1, 1) === DOUBT_START_MAX && startingDoubt(0, 0) >= 0);
+check(`Cap: ${DOUBT_START_MAX} up to 50% severity, ${DOUBT_START_MAX_HIGH_SEVERITY} above`, startingDoubtCap(0) === DOUBT_START_MAX && startingDoubtCap(0.5) === DOUBT_START_MAX && startingDoubtCap(0.51) === DOUBT_START_MAX_HIGH_SEVERITY && startingDoubtCap(1) === DOUBT_START_MAX_HIGH_SEVERITY);
+check('Starting doubt never exceeds its cap (formula max is 75)', near(startingDoubt(1, 1), 75) && near(startingDoubt(0.5, 1), 57.5) && startingDoubt(0, 0) >= 0);
 {
   const messy = new Evidence(); // both bodies out, blood, curtains open, gun out
   const s = messy.getVisibleSeverity() / 100;
-  check('Messy house (severity 1, suspicion 1): starts at 70', near(startingDoubt(s, messy.calculateSuspicion()), 70));
+  check('Messy house (severity 1, suspicion 1): starts at 75 (was 70)', near(startingDoubt(s, messy.calculateSuspicion()), 75));
   const tidy = new Evidence();
   for (const b of tidy.getBodies()) tidy.hideBody(b.id);
   for (const t of tidy.getBloodTraces()) tidy.cleanBloodTrace(t.id);
@@ -71,7 +73,8 @@ check(`Starting doubt is clamped to ${DOUBT_START_MAX}`, startingDoubt(1, 1) ===
 {
   let bestOk = true, worstOk = true;
   const cases: string[] = [];
-  for (const v of VISITORS) for (const sev of [0, 0.5, 1]) for (const sus of [0, 0.5, 1]) for (const par of [0, 50, 100]) {
+  const severities = Array.from({ length: 11 }, (_, i) => i / 10);
+  for (const v of VISITORS) for (const sev of severities) for (const sus of [0, 0.25, 0.5, 0.75, 1]) for (const par of [0, 39, 50, 71, 100]) {
     const best = new DialogueSession(v, sev, sus);
     while (!best.finished) best.answer(bestAnswer(best.current!), par);
     if (best.success !== true || best.doubt >= DOUBT_PASS_BELOW) { bestOk = false; cases.push(`best ${v} ${sev}/${sus}/${par} -> ${best.doubt}`); }
@@ -79,10 +82,21 @@ check(`Starting doubt is clamped to ${DOUBT_START_MAX}`, startingDoubt(1, 1) ===
     while (!worst.finished) worst.answer(worstAnswer(worst.current!), par);
     if (worst.success !== false) { worstOk = false; cases.push(`worst ${v} ${sev}/${sus}/${par} -> ${worst.doubt}`); }
   }
-  check('Best answers always succeed (all visitors, evidence 0-1, paranoia 0-100)', bestOk, cases.join('; '));
+  check('Best answers always succeed (all visitors, severity 0-1 in 0.1 steps, suspicion 0-1, paranoia 0-100)', bestOk, cases.join('; '));
+  // At the cap itself (start 80), nervous (+5 per answer): perfect answers still pass
+  let atCapOk = true;
+  const atCap: string[] = [];
+  for (const v of VISITORS) {
+    const s = new DialogueSession(v, 1, 1);
+    s.doubt = DOUBT_START_MAX_HIGH_SEVERITY;
+    while (!s.finished) s.answer(bestAnswer(s.current!), 100);
+    atCap.push(`${v} ${s.doubt}`);
+    if (s.success !== true) atCapOk = false;
+  }
+  check(`Starting at the ${DOUBT_START_MAX_HIGH_SEVERITY} cap while nervous, perfect answers still pass (${atCap.join(', ')})`, atCapOk);
   check('Worst answers always fail (all visitors, evidence 0-1, paranoia 0-100)', worstOk, cases.join('; '));
 
-  const early = new DialogueSession('officer', 1, 1); // starts at 70
+  const early = new DialogueSession('officer', 1, 1); // starts at 75
   const r = early.answer(worstAnswer(early.current!), 80); // +30 +5 nervous
   check(`Doubt reaching ${DOUBT_FAIL} ends the talk at once (FAIL)`, early.doubt === DOUBT_FAIL && early.finished && early.success === false && r!.finished && early.round === 1);
   check('No more answers after it ends', early.answer(0, 50) === null && early.current === null);
@@ -116,7 +130,7 @@ const dialogueOf = (d: Driver) => (d.game as any).dialogue as DialogueSession | 
   const s = dialogueOf(d)!;
   check('T opens the dialogue: name, line, three answers, DOUBT bar', !!s && !isHidden('dialogue-overlay') && elementText('dialogue-name') === DIALOGUES.neighbour.name &&
     elementText('dialogue-line') === DIALOGUES.neighbour.rounds[0].question && elementText('dialogue-answer-2').startsWith('2. ') && elementText('doubt-val') === String(Math.round(s.doubt)));
-  check(`Starting doubt from the evidence (bodies out): ${s.doubt.toFixed(0)}`, s.doubt === DOUBT_START_MAX);
+  check(`Starting doubt from the evidence (bodies out, high severity): ${s.doubt.toFixed(0)}`, s.doubt > DOUBT_START_MAX && s.doubt <= DOUBT_START_MAX_HIGH_SEVERITY);
   check('Movement frozen, cursor released, game not paused', (d.player as any).frozen === true && !d.player.isLocked() && !d.flow.isPaused);
   d.run(2);
   check('The released cursor does not trigger the pause overlay', !d.flow.isPaused && isHidden('pause-overlay'));
@@ -138,7 +152,7 @@ const dialogueOf = (d: Driver) => (d.game as any).dialogue as DialogueSession | 
   d.flow.paranoia = 30; // (the lit foyer has calmed it to 0)
   const p0 = d.flow.paranoia;
   d.press(`Digit${bestAnswer(s.current!) + 1}`); // a good answer
-  check('A good answer lowers paranoia a little and doubt a lot', d.flow.paranoia < p0 && s.round === 1 && s.doubt < DOUBT_START_MAX && elementText('dialogue-reply').length > 2);
+  check('A good answer lowers paranoia a little and doubt a lot', d.flow.paranoia < p0 && s.round === 1 && s.doubt < DOUBT_START_MAX_HIGH_SEVERITY - 15 && elementText('dialogue-reply').length > 2);
   const p1 = d.flow.paranoia;
   d.press(`Digit${worstAnswer(s.current!) + 1}`); // a bad one
   check('A bad answer raises paranoia a little', d.flow.paranoia > p1 && s.round === 2);

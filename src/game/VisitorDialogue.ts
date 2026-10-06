@@ -25,6 +25,8 @@ export const DOUBT_START_BASE = 10;
 export const DOUBT_START_SEVERITY = 35;   // x evidence severity (0..1)
 export const DOUBT_START_SUSPICION = 30;  // x evidence suspicion (0..1)
 export const DOUBT_START_MAX = 70;
+export const DOUBT_START_MAX_HIGH_SEVERITY = 80; // cap when evidence severity is above HIGH_SEVERITY
+export const HIGH_SEVERITY = 0.5;
 export const DOUBT_FAIL = 100;            // reaching this ends the talk at once (FAIL)
 export const DOUBT_PASS_BELOW = 50;       // after the last round, below this is SUCCESS
 export const LIE_HIGH_SEVERITY = 0.5;     // a lie with severity above this...
@@ -109,8 +111,13 @@ export interface DialogueContext {
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+export function startingDoubtCap(severity: number): number {
+  return severity > HIGH_SEVERITY ? DOUBT_START_MAX_HIGH_SEVERITY : DOUBT_START_MAX;
+}
+
+// Note: the formula itself tops out at 10 + 35 + 30 = 75, so in play the highest start is 75
 export function startingDoubt(severity: number, suspicion: number): number {
-  return clamp(DOUBT_START_BASE + DOUBT_START_SEVERITY * severity + DOUBT_START_SUSPICION * suspicion, 0, DOUBT_START_MAX);
+  return clamp(DOUBT_START_BASE + DOUBT_START_SEVERITY * severity + DOUBT_START_SUSPICION * suspicion, 0, startingDoubtCap(severity));
 }
 
 // Doubt change for one answer, with the lie / nervous / calm modifiers
