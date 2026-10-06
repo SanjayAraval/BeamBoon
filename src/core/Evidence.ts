@@ -14,7 +14,6 @@ export interface BodyEvidence {
   position: { x: number; y: number; z: number };
   isHidden: boolean; // True if hidden inside closet or under bed
   isCovered: boolean; // Draped with a bedsheet: still in place, but reads as "something under a sheet"
-  searchable: boolean; // hidden somewhere a search would find it (behind the sofa)
 }
 
 // How damning one piece of evidence looks to a visitor, 0..100
@@ -103,22 +102,13 @@ export class Evidence {
       kind,
       position: pos,
       isHidden: false,
-      isCovered: false,
-      searchable: false
+      isCovered: false
     });
   }
 
-  // searchable: hidden from visitors at the door, but a search at the final inspection finds it
-  public hideBody(id: string, searchable = false): void {
+  public hideBody(id: string): void {
     const body = this.bodies.find(b => b.id === id);
-    if (!body) return;
-    body.isHidden = true;
-    body.searchable = searchable;
-  }
-
-  // Bodies the final inspection finds: in plain view, or hidden somewhere a search turns up
-  public getBodiesFoundOnSearch(): number {
-    return this.bodies.filter(b => !b.isHidden || b.searchable).length;
+    if (body) body.isHidden = true;
   }
 
   // Drape a sheet over a body. It stays where it is (not hidden).

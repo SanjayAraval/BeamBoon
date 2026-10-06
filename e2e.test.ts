@@ -160,15 +160,15 @@ function cleanEnding(): void {
 }
 
 function caughtEnding(): void {
-  console.log('\nCAUGHT: stash the bodies behind the sofa, fail the talk, the search finds them');
+  console.log('\nCAUGHT: hide the bodies behind the sofa but leave the blood, fail the talk');
   const { d, ending } = newGame(2);
   startGame(d);
   playAct1(d, false);
   waitInFoyer(d);
 
-  // Stash both bodies behind the sofa: safe from visitors at the door, not from a search
+  // Hide both bodies behind the sofa (ground floor) but leave the blood on the floor
   check('Drags both bodies behind the sofa (ground floor)', d.hideBody('body_father', 'sofa') && d.hideBody('body_mother', 'sofa'));
-  check('Visitors see no bodies; a search would find two', d.evidence.getExposedBodiesCount() === 0 && d.evidence.getBodiesFoundOnSearch() === 2);
+  check('No bodies in view; the blood is still there', d.evidence.getExposedBodiesCount() === 0 && d.evidence.getUncleanedTracesCount() === 2);
   waitInFoyer(d);
   check('The neighbour knocks', waitForKnock(d, 120));
   check('Ignored, the neighbour gives up and leaves', d.runUntil(() => !d.flow.getVisitorManager().isVisitorAtDoor(), 60));
@@ -182,7 +182,7 @@ function caughtEnding(): void {
   check('Second failed talk: the officer forces the door', second.opened && second.success === false);
   d.runUntil(() => d.phase === GamePhase.ENDING, 5);
   checkEndingScreen(d, ending, 'caught');
-  check('The search found the bodies behind the sofa', d.evidence.getBodiesFoundOnSearch() === 2);
+  check('Caught by the blood left on the floor', d.evidence.getUncleanedTracesCount() === 2 && d.evidence.getExposedBodiesCount() === 0);
 }
 
 function runEnding(): void {

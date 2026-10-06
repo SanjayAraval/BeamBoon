@@ -131,16 +131,15 @@ console.log('--- RUNNING BODY DRAG TEST ---');
   d.run(0.2);
   check('Behind the sofa: "[E] Hide body behind the sofa"', elementText('interaction-text') === '[E] Hide body behind the sofa', elementText('interaction-text'));
   d.press('KeyE');
-  check('Hidden: severity 0, invisible, not counted by visitors at the door',
+  check('Hidden exactly like upstairs: severity 0, invisible, not counted',
     body(d, 'body_mother').isHidden && d.evidence.getBodySeverity('body_mother') === 0 && !d.flow.getParentRoot('mother')!.visible && d.evidence.getExposedBodiesCount() === 1);
-  check('...but the final inspection would find it', body(d, 'body_mother').searchable && d.evidence.getBodiesFoundOnSearch() === 2);
-  check('Upstairs hiding is not found by the search', d.hideBody('body_father') && !body(d, 'body_father').searchable && d.evidence.getBodiesFoundOnSearch() === 1);
-  // With everything else tidied, the sofa body alone decides the inspection
+  check('Father into the upstairs closet', d.hideBody('body_father') && d.evidence.getExposedBodiesCount() === 0);
+  // With everything else tidied, a body behind the sofa is as safe as one upstairs
   for (const t of d.evidence.getBloodTraces()) d.evidence.cleanBloodTrace(t.id);
   d.evidence.setCurtainsClosed(true);
   d.evidence.setPistolHidden(true);
   const result = Endings.calculateEnding(10, d.evidence);
-  check(`Otherwise clean house, one body behind the sofa: the inspection ends in ${result.type.toUpperCase()}`, result.type === 'caught' && d.evidence.getVisibleSeverity() === 0);
+  check(`Otherwise clean house, one body behind the sofa: the inspection ends ${result.type.toUpperCase()}`, result.type === 'clean' && d.evidence.getVisibleSeverity() === 0);
 }
 
 // Automatic release ---------------------------------------------------------------------------
