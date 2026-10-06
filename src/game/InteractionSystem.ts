@@ -16,6 +16,8 @@ export interface Interactable {
   materials?: THREE.MeshStandardMaterial[];
 }
 
+const WALL_TOLERANCE = 0.05;
+
 export class InteractionSystem {
   private interactables: Interactable[] = [];
   private raycaster = new THREE.Raycaster();
@@ -144,8 +146,9 @@ export class InteractionSystem {
       
       const dist = intersect.distance;
       if (dist <= (interactable.maxDistance || 1.8) && dist < nearestDist) {
-        // Must be closer than wall
-        if (dist < nearestWallDist) {
+        // Must be closer than wall. A solid interactable (the gun safe) is its own collider and
+        // its hit box face sits at the same distance, so allow a hair of tolerance.
+        if (dist < nearestWallDist + WALL_TOLERANCE) {
           nearestDist = dist;
           nearestInteractable = interactable;
         }

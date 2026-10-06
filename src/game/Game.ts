@@ -844,6 +844,8 @@ export class Game {
     if (this.postProcessing) {
       this.postProcessing.setCamera(this.peepholeManager.isActive() ? this.peepholeManager.getCamera() : this.camera);
       this.postProcessing.render(time);
+    } else {
+      this.scene.updateMatrixWorld(); // what rendering does each frame; raycasts depend on it
     }
 
     const debugOverlay = document.getElementById('debug-overlay');
