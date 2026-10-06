@@ -97,6 +97,14 @@ function playAct1(d: Driver, nervousShots: boolean): void {
   check('Act 1 ends and the cover-up begins', d.runUntil(() => d.phase === GamePhase.ACT2_COVERUP, 15), d.phaseName);
   check('Both parents are down: 2 bodies, 2 blood traces', d.evidence.getExposedBodiesCount() === 2 && d.evidence.getUncleanedTracesCount() === 2);
   d.run(0.5);
+
+  // Playtest regressions, in every run: standing still in the dark cover-up is not fatal, and the
+  // peephole works from the front door
+  let maxParanoia = d.flow.paranoia;
+  for (let i = 0; i < 20; i++) { d.run(1); maxParanoia = Math.max(maxParanoia, d.flow.paranoia); }
+  check(`Idle 20s at the start of the cover-up: paranoia stays under 60 (max ${maxParanoia.toFixed(0)})`, maxParanoia < 60 && d.phase === GamePhase.ACT2_COVERUP);
+  const peep = d.usePeephole('KeyQ');
+  check('Peephole: look at the front door, E enters, Q leaves', peep.entered && peep.exited);
 }
 
 function turnOn(d: Driver, lightId: string, switchId: string): void {
@@ -184,7 +192,7 @@ function runEnding(): void {
 }
 
 function breakdownEnding(): void {
-  console.log('\nBREAKDOWN: sit in the dark with the flashlight off until paranoia hits 100');
+  console.log('\nBREAKDOWN: the dark alone is survivable; hiding in the closet too long is not');
   const { d, ending } = newGame(4);
   startGame(d);
   playAct1(d, false);
@@ -192,7 +200,11 @@ function breakdownEnding(): void {
   d.placePlayer(2.0, 2.0, 0); // dark kitchen
   d.setFlashlight(false);
   check('Flashlight is off', !d.flashlight.isTurnedOn());
-  check('Paranoia climbs to 100 before the first knock', d.runUntil(() => d.phase === GamePhase.ENDING, 85), `paranoia ${d.flow.paranoia.toFixed(0)}, ${d.phaseName}`);
+  check('Sitting in the dark until the first knock does not break the player', d.runUntil(() => d.phase === GamePhase.ENDING, 40) === false && d.flow.paranoia < 60, `paranoia ${d.flow.paranoia.toFixed(0)}, ${d.phaseName}`);
+  const door = d.house.animatedDoors.find((x: any) => x.id === 'door_closet');
+  if (!door.isOpen) d.interact('door_closet');
+  check('Hides in the closet', d.interact('hiding_spot'));
+  check('Staying hidden too long: paranoia climbs to 100', d.runUntil(() => d.phase === GamePhase.ENDING, 15), `paranoia ${d.flow.paranoia.toFixed(0)}, ${d.phaseName}`);
   check('Paranoia maxed out', d.flow.paranoia >= 100);
   checkEndingScreen(d, ending, 'breakdown');
 }

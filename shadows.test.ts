@@ -256,7 +256,8 @@ console.log('--- RUNNING PARANOIA SHADOWS TEST ---');
   check(`Despawns on its own after ${SHADOW_LIFETIME}s`, sh.count === 0);
 
   // Leak check: spawn and remove many times
-  const baseChildren = d.game['scene' as keyof typeof d.game] ? (d.game as any).scene.children.length : 0;
+  // Count shadow groups only: the game moves on meanwhile (a visitor may arrive and join the scene)
+  const shadowNodes = () => (d.game as any).scene.children.filter((c: any) => c.name === 'paranoia_shadow').length;
   const s0 = { ...sh.stats };
   for (let i = 0; i < 60; i++) {
     sh.spawnAt(BEHIND.x, BEHIND.z, 0);
@@ -264,7 +265,8 @@ console.log('--- RUNNING PARANOIA SHADOWS TEST ---');
   }
   sh.clear();
   check('No leaks: every spawned shadow was disposed and removed from the scene',
-    sh.stats.spawned - s0.spawned === 60 && sh.stats.disposed - s0.disposed === 60 && (d.game as any).scene.children.length === baseChildren);
+    // (natural spawns can join the 60 placed ones while the game runs on)
+    sh.stats.spawned - s0.spawned >= 60 && sh.stats.disposed - s0.disposed === sh.stats.spawned - s0.spawned && shadowNodes() === 0);
 }
 
 // 4. Visitor inside: paranoia rises at 0.35x, consistently with hiding -------------------------

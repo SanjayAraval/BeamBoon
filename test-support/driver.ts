@@ -160,6 +160,19 @@ export class Driver {
       this.runUntil(() => this.phase === GamePhase.ACT2_COVERUP, 15);
   }
 
+  // Walk up to the front door, look at it and press E: the peephole. Leave with E, Q or right-click.
+  usePeephole(exitWith: 'KeyE' | 'KeyQ' | 'right', standZ = 10.9): { entered: boolean; exited: boolean } {
+    const pm = (this.game as any).peepholeManager;
+    this.placePlayer(7.4, standZ, 0);
+    this.settle();
+    this.aimAt(new THREE.Vector3(7.4, 1.2, 12)); // at the door, the way a player looks at it
+    this.press('KeyE');
+    const entered = pm.isActive();
+    this.run(0.5);
+    if (exitWith === 'right') this.click(2); else this.press(exitWith);
+    return { entered, exited: entered && !pm.isActive() };
+  }
+
   setFlashlight(on: boolean): void {
     if (this.flashlight.isTurnedOn() !== on) this.press('KeyF');
   }

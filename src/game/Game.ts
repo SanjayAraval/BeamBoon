@@ -259,6 +259,11 @@ export class Game {
           ComicOverlays.popOnomatopoeia(this.house.isCurtainsClosed ? 'CURTAINS CLOSED' : 'CURTAINS OPEN', 50, 50);
           this.soundManager.playLampClick();
         };
+      } else if (type === 'door' && prop.id === 'door_front') {
+        // The front door stays locked: using it means looking through the peephole
+        promptTextFn = () => 'Look through the peephole';
+        canInteractFn = () => this.canUsePeephole() ? { allowed: true } : { allowed: false, reason: 'Not now' };
+        interactFn = () => this.enterPeephole();
       } else if (type === 'door' && prop.id === 'door_rear') {
         // The rear door is the way out for the "run" ending
         const canFlee = () => this.gameFlow.phase >= GamePhase.ACT2_COVERUP && this.gameFlow.phase <= GamePhase.VISITOR_PARTNER;
@@ -1144,7 +1149,16 @@ export class Game {
       this.exitPeephole();
       return;
     }
+    // The visitor prompt says "[E] PEEPHOLE": with nothing else targeted, E does exactly that
+    if (!this.interactionSystem.hasFocus() && this.isDoorPromptUp() && this.canUsePeephole()) {
+      this.enterPeephole();
+      return;
+    }
     this.interactionSystem.interact();
+  }
+
+  private isDoorPromptUp(): boolean {
+    return this.gameFlow.getVisitorManager().isVisitorAtDoor() && this.isNearFrontDoor();
   }
 
   private updateDoorPrompt(): void {
@@ -1179,9 +1193,9 @@ export class Game {
           this.hud.fade(0);
         }
       }
-      this.gameFlow.update(delta, this.flashlight.isTurnedOn(), time);
+      // Shadows first, so their paranoia shares GameFlow's per-second cap this frame
       const shadowParanoia = this.shadows.update(delta, this.shadowFrame());
-      if (shadowParanoia !== 0) this.gameFlow.addParanoia(shadowParanoia);
+      this.gameFlow.update(delta, this.flashlight.isTurnedOn(), time, shadowParanoia);
       if (this.isInGame()) this.updateTaskList();
       this.updateObjectiveLine();
 

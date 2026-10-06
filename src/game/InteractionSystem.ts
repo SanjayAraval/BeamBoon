@@ -168,6 +168,10 @@ export class InteractionSystem {
     }
   }
 
+  public hasFocus(): boolean {
+    return this.enabled && this.focused !== null;
+  }
+
   public interact(): void {
     if (!this.enabled || !this.focused) return;
     

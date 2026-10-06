@@ -54,6 +54,11 @@ export const ACT1_ARRIVAL_PAGES: PageDef[] = [
 ];
 
 const HIDDEN_PARANOIA_RATE = 10; // per second: dark and cramped
+// Act 2 balance: the dark house is unsettling, not deadly. Breakdown comes from mistakes
+// (hiding too long, staring at shadows instead of lighting them), not from standing still.
+export const ACT2_DARKNESS_CEILING = 45;     // darkness alone can't push paranoia past this
+export const ACT2_AMBIENT_CEILING = 70;      // darkness + a visitor at the door can't push past this
+export const PARANOIA_MAX_GAIN_PER_SEC = 6;  // darkness, visitors and shadows together, per second
 // While a visitor is inside the house every paranoia rise is scaled down, so a player who stays
 // hidden can outlast the search (hidden rate 10/s becomes 3.5/s)
 export const VISITOR_INSIDE_PARANOIA_FACTOR = 0.35;
@@ -132,6 +137,8 @@ export class GameFlow {
   public hasGun = false;
   private doorUnlockTimer = -1;    // the front door just unlocked; the comic follows
   private objective = '';
+  private paranoiaLog = new Map<string, number>();
+  private gainBudget = 0; // what is left of this frame's PARANOIA_MAX_GAIN_PER_SEC
   private objectiveHint = '';
 
   // Cover-up mechanics
@@ -267,10 +274,43 @@ export class GameFlow {
   }
 
   // Paranoia from outside GameFlow (e.g. paranoia shadows)
-  public addParanoia(amount: number): void {
-    const scaled = amount > 0 ? amount * this.riseFactor() : amount;
-    this.paranoia = Math.max(0, Math.min(100, this.paranoia + scaled));
+  public addParanoia(amount: number, source = 'shadows'): void {
+    this.applyParanoia(amount, source);
     this.hud.updateParanoia(this.paranoia);
+  }
+
+  // Every paranoia change goes through here: rises are scaled while a visitor is inside, the
+  // result is clamped to 0..100, and the change actually applied is logged by source
+  private applyParanoia(amount: number, source: string): void {
+    const scaled = amount > 0 ? amount * this.riseFactor() : amount;
+    const before = this.paranoia;
+    this.paranoia = Math.max(0, Math.min(100, this.paranoia + scaled));
+    const applied = this.paranoia - before;
+    if (applied !== 0) this.paranoiaLog.set(source, (this.paranoiaLog.get(source) ?? 0) + applied);
+  }
+
+  // A continuous source (darkness, visitor, shadows): scaled while a visitor is inside, limited by
+  // this frame's share of PARANOIA_MAX_GAIN_PER_SEC and by a ceiling it can't push past
+  private gainCapped(amount: number, source: string, ceiling: number): void {
+    if (amount <= 0) {
+      this.applyParanoia(amount, source);
+      return;
+    }
+    const gain = Math.min(amount * this.riseFactor(), this.gainBudget, Math.max(0, ceiling - this.paranoia));
+    if (gain <= 0) return;
+    this.gainBudget -= gain;
+    const before = this.paranoia;
+    this.paranoia = Math.min(100, this.paranoia + gain);
+    this.paranoiaLog.set(source, (this.paranoiaLog.get(source) ?? 0) + (this.paranoia - before));
+  }
+
+  // Paranoia change per source since the last reset (for tuning and tests)
+  public getParanoiaLog(): Map<string, number> {
+    return this.paranoiaLog;
+  }
+
+  public resetParanoiaLog(): void {
+    this.paranoiaLog.clear();
   }
 
   public isSpotLit(x: number, z: number, floor: number): boolean {
@@ -516,7 +556,9 @@ export class GameFlow {
     if (this.playerHidden) this.knockedWhileHidden();
   }
 
-  public update(delta: number, flashlightOn: boolean, time: number): void {
+  // shadowParanoia: this frame's change from paranoia shadows (Game updates them first)
+  public update(delta: number, flashlightOn: boolean, time: number, shadowParanoia = 0): void {
+    this.gainBudget = PARANOIA_MAX_GAIN_PER_SEC * delta;
     if (this.fadeTimer > 0) {
       this.fadeTimer -= delta;
       if (this.fadeTimer <= 0) {
@@ -657,7 +699,7 @@ export class GameFlow {
           this.lightningTimer = 0.3; // Flash duration
           
           // Add paranoia burst
-          this.paranoia = Math.min(100, this.paranoia + 3 * this.riseFactor());
+          this.applyParanoia(3, 'lightning');
         } else {
           // End lightning flash
           this.isLightning = false;
@@ -669,20 +711,19 @@ export class GameFlow {
     // Paranoia updates: a lit room calms you down, the flashlight only slows the dread
     const playerPos = this.player.getPosition();
     const playerRoomLit = this.isLocationLit(playerPos.x, playerPos.z, this.player.getFloor());
-    let paranoiaDelta = 0;
     if (this.playerHidden) {
-      paranoiaDelta = HIDDEN_PARANOIA_RATE * delta;
+      this.applyParanoia(HIDDEN_PARANOIA_RATE * delta, 'hiding');
     } else if (this.phase === GamePhase.ACT1_POWER_BACK || playerRoomLit || this.isLightning) {
-      paranoiaDelta = -22 * delta;
+      this.applyParanoia(-22 * delta, playerRoomLit ? 'lit room (relief)' : this.isLightning ? 'lightning flash (relief)' : 'power back (relief)');
     } else {
-      paranoiaDelta = (flashlightOn ? 2 : 6) * delta;
+      const act2 = this.phase >= GamePhase.ACT2_COVERUP;
+      this.gainCapped((flashlightOn ? 2 : 6) * delta, flashlightOn ? 'darkness (flashlight on)' : 'darkness', act2 ? ACT2_DARKNESS_CEILING : 100);
       if (this.visitorManager.isVisitorAtDoor()) {
-        paranoiaDelta += 10 * delta;
+        this.gainCapped(10 * delta, 'visitor at the door', act2 ? ACT2_AMBIENT_CEILING : 100);
       }
     }
-    
-    if (paranoiaDelta > 0) paranoiaDelta *= this.riseFactor();
-    this.paranoia = Math.max(0, Math.min(100, this.paranoia + paranoiaDelta));
+    // Looking at a shadow is a choice (light it instead): allowed past the ambient ceiling, but within the per-second cap
+    if (shadowParanoia !== 0) this.gainCapped(shadowParanoia, 'shadows', 100);
     this.hud.updateParanoia(this.paranoia);
     
     if (this.paranoia >= 100 && this.phase >= GamePhase.ACT2_COVERUP && this.phase < GamePhase.ENDING) {

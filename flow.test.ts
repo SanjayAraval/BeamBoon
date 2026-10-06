@@ -3,7 +3,7 @@
 
 import { simClock, resetHeadless, keyDown, keyUp, mouseDownOn, comicRoot, windowListenerCount } from './test-support/headless';
 import * as THREE from 'three';
-import { GameFlow, GamePhase } from './src/game/GameFlow';
+import { GameFlow, GamePhase, ACT2_DARKNESS_CEILING } from './src/game/GameFlow';
 import { House } from './src/world/House';
 import { Player } from './src/core/Player';
 import { Evidence } from './src/core/Evidence';
@@ -168,9 +168,13 @@ assert('With the gun, attacking starts the shooting', gameFlow.phase === GamePha
 gameFlow.advancePhase(); waitUntilPhase(GamePhase.ACT1_POWER_BACK, 2);
 gameFlow.advancePhase(); waitUntilPhase(GamePhase.ACT2_COVERUP, 2);
 
-gameFlow.paranoia = 98;
+gameFlow.paranoia = 40;
 gameFlow.isPowerOn = false; // Dark
-for (let i = 0; i < 20; i++) step(0.1); // 2s in the dark
+for (let i = 0; i < 300; i++) step(0.1); // 30s in the dark
+assert('Darkness alone stops at the Act 2 ceiling (no breakdown from standing still)', gameFlow.paranoia <= ACT2_DARKNESS_CEILING + 3 && gameFlow.phase === GamePhase.ACT2_COVERUP);
+gameFlow.paranoia = 98;
+gameFlow.setPlayerHidden(true); // a real mistake: staying hidden in the cramped closet
+for (let i = 0; i < 20; i++) step(0.1);
 assert('Paranoia hit 100', gameFlow.paranoia >= 100);
 assert('Triggered BREAKDOWN ending', (triggeredEnding as EndingData | null)?.type === 'breakdown');
 
