@@ -38,8 +38,9 @@ export class VisitorManager {
     this.talkCooldown = 0;
   }
 
-  public triggerKnock(): void {
-    this.unrepliedKnocks++;
+  // A knock nobody could have heard (the player is hiding) is not an ignored knock
+  public triggerKnock(counted = true): void {
+    if (counted) this.unrepliedKnocks++;
     if (this.currentFigure) this.currentFigure.setPose('knock');
   }
 

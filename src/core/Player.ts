@@ -271,6 +271,16 @@ export class Player {
     return this.camera.position.y >= 3.0 ? 1 : 0;
   }
 
+  public setLook(yaw: number, pitch: number): void {
+    this.yaw = yaw;
+    this.pitch = pitch;
+    this.updateCameraRotation();
+  }
+
+  public getLook(): { yaw: number; pitch: number } {
+    return { yaw: this.yaw, pitch: this.pitch };
+  }
+
   public setYaw(yaw: number): void {
     this.yaw = yaw;
     this.updateCameraRotation();

@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { Player } from '../core/Player';
 import { House } from '../world/House';
-import { NpcManager } from '../world/NpcController';
+import { NpcManager, NpcController } from '../world/NpcController';
 import { Narration } from '../story/Narration';
-import { Evidence } from '../core/Evidence';
+import { Evidence, FORCED_ENTRY_SEVERITY } from '../core/Evidence';
 import { VisitorManager, VisitorInfo } from '../core/Visitor';
 import { Endings, EndingData } from '../story/Endings';
 import { SoundManager } from '../audio/SoundManager';
@@ -35,6 +35,16 @@ export function getVisionMode(character: Character, paranoia: number, isLightnin
   if (isLightning) return false;
   if (isRoomLit) return false;
   return true;
+}
+
+const HIDDEN_PARANOIA_RATE = 10; // per second: dark and cramped
+const NOBODY_HOME_WAIT = 20; // seconds a visitor waits after a knock nobody answered
+const SEARCH_DURATION = 25; // seconds a visitor who let themselves in looks around
+const SEARCH_ROUTE = ['living_room', 'kitchen', 'dining', 'foyer', 'stairs_top', 'master_bedroom'];
+
+export interface CoverUpTask {
+  label: string;
+  done: boolean;
 }
 
 const COVERUP_DURATION = 90; // seconds to clean up before the first knock
@@ -98,6 +108,15 @@ export class GameFlow {
   private visitorGoneTimer = 0;
   private forcedEntryTimer = -1; // counts down (game time) to a visitor pushing inside
 
+  // Cover-up mechanics
+  public playerHidden = false;     // inside the closet
+  public carryingSheet = false;
+  private nobodyHomeTimer = -1;    // a knock went unanswered while hidden: the visitor leaves when this runs out
+  private searcher: NpcController | null = null;
+  private searchTimer = -1;
+  private searchSawSheet = new Set<string>();
+  public onReset?: () => void;     // Game drops its own cover-up visuals (sheets, hiding view)
+
   // Fired when the parents go down, so the player always ends up holding the pistol that did it
   public onParentsShot?: () => void;
   
@@ -137,6 +156,12 @@ export class GameFlow {
     this.fadeTimer = -1;
     this.nextPhasePending = false;
     this.disposeComic(); // Play Again: the comic plays again from the start
+    this.playerHidden = false;
+    this.carryingSheet = false;
+    this.nobodyHomeTimer = -1;
+    this.searcher = null;
+    this.searchTimer = -1;
+    this.searchSawSheet.clear();
     
     this.evidence.reset();
     this.visitorManager.dismissVisitor();
@@ -153,6 +178,98 @@ export class GameFlow {
     
     const title = document.getElementById('title-screen');
     if (title) title.classList.remove('hidden');
+    this.onReset?.();
+  }
+
+  // --- Cover-up mechanics ---------------------------------------------------------------
+
+  public canHide(): boolean {
+    return this.phase >= GamePhase.ACT2_COVERUP && this.phase <= GamePhase.VISITOR_PARTNER;
+  }
+
+  public setPlayerHidden(hidden: boolean): void {
+    if (this.playerHidden === hidden) return;
+    this.playerHidden = hidden;
+    // Stepping out while a visitor is walking the house: they see you
+    if (!hidden && this.searcher && this.phase < GamePhase.ENDING) {
+      this.endSearch();
+      this.phase = GamePhase.FINAL_INSPECTION;
+      this.checkEnding();
+    }
+  }
+
+  public takeSheet(): boolean {
+    if (this.carryingSheet) return false;
+    this.carryingSheet = true;
+    return true;
+  }
+
+  // Uses up the carried sheet. False if there is no sheet or the body can't be covered.
+  public tryCoverBody(bodyId: string): boolean {
+    if (!this.carryingSheet) return false;
+    if (!this.evidence.coverBody(bodyId)) return false;
+    this.carryingSheet = false;
+    return true;
+  }
+
+  public getTasks(): CoverUpTask[] {
+    const e = this.evidence;
+    return [
+      { label: 'Cover or hide both bodies', done: e.areBodiesDealtWith() },
+      { label: 'Clean the blood', done: e.getUncleanedTracesCount() === 0 },
+      { label: 'Close the curtains', done: e.isCurtainsClosed() },
+      { label: 'Lock the gun in the safe', done: e.isPistolHidden() }
+    ];
+  }
+
+  public isVisitorSearching(): boolean {
+    return this.searcher !== null;
+  }
+
+  public getNobodyHomeTimer(): number {
+    return this.nobodyHomeTimer;
+  }
+
+  // Nobody answered and something damning is in plain view: the visitor breaks in and it is over
+  private breakInAndCatch(): void {
+    this.visitorManager.dismissVisitor();
+    this.narration.showCaption('No answer. The door gives way. Then the flashlight finds what is on the floor.', 4.0);
+    this.phase = GamePhase.FINAL_INSPECTION;
+    this.triggerEnding(Endings.caught());
+  }
+
+  private knockedWhileHidden(): void {
+    if (this.evidence.getVisibleSeverity() > FORCED_ENTRY_SEVERITY) {
+      this.breakInAndCatch();
+      return;
+    }
+    if (this.nobodyHomeTimer < 0) this.nobodyHomeTimer = NOBODY_HOME_WAIT;
+  }
+
+  private startSearch(kind: 'neighbour' | 'officer' | 'partner'): void {
+    this.visitorManager.dismissVisitor();
+    this.searchTimer = SEARCH_DURATION;
+    this.searchSawSheet.clear();
+    this.narration.showCaption('The front door creaks open. Footsteps in the hall...', 3.0);
+    this.searcher = this.npcManager.spawnSearcher(kind, SEARCH_ROUTE, (wp) => {
+      const room = findRoom(wp.x, wp.z, wp.floor);
+      if (!room) return;
+      this.narration.showCaption(`Through the slit: footsteps in the ${room.name}.`, 2.5);
+      // Walking past something under a sheet: suspicious, but not proof
+      for (const b of this.evidence.getBodies()) {
+        if (!b.isCovered || b.isHidden || this.searchSawSheet.has(b.id)) continue;
+        if (findRoom(b.position.x, b.position.z, 0)?.name === room.name) {
+          this.searchSawSheet.add(b.id);
+          this.evidence.addVisitorSuspicion(0.15);
+        }
+      }
+    });
+  }
+
+  private endSearch(): void {
+    if (this.searcher) this.npcManager.removeVisitor(this.searcher);
+    this.searcher = null;
+    this.searchTimer = -1;
   }
 
     private fadeTimer = -1;
@@ -283,6 +400,7 @@ export class GameFlow {
         this.phaseTimer = 0;
         this.knockTimer = 0;
         this.visitorGoneTimer = 0;
+        this.nobodyHomeTimer = -1;
         this.visitorManager.spawnVisitor(VISITORS.neighbour);
         this.triggerKnock();
         this.narration.triggerBeat('visitor_knocking');
@@ -293,6 +411,7 @@ export class GameFlow {
         this.phaseTimer = 0;
         this.knockTimer = 0;
         this.visitorGoneTimer = 0;
+        this.nobodyHomeTimer = -1;
         this.visitorManager.spawnVisitor(VISITORS.officer);
         this.triggerKnock();
         this.hud.showObjective('Someone is knocking.');
@@ -302,6 +421,7 @@ export class GameFlow {
         this.phaseTimer = 0;
         this.knockTimer = 0;
         this.visitorGoneTimer = 0;
+        this.nobodyHomeTimer = -1;
         this.visitorManager.spawnVisitor(VISITORS.partner);
         this.triggerKnock();
         this.hud.showObjective('Someone is knocking.');
@@ -332,8 +452,9 @@ export class GameFlow {
 
   private triggerKnock(): void {
     this.knockTimer = 0;
-    this.visitorManager.triggerKnock();
+    this.visitorManager.triggerKnock(!this.playerHidden);
     SoundManager.getInstance().playKnock();
+    if (this.playerHidden) this.knockedWhileHidden();
   }
 
   public update(delta: number, flashlightOn: boolean, time: number): void {
@@ -490,7 +611,9 @@ export class GameFlow {
     const playerPos = this.player.getPosition();
     const playerRoomLit = this.isLocationLit(playerPos.x, playerPos.z, this.player.getFloor());
     let paranoiaDelta = 0;
-    if (this.phase === GamePhase.ACT1_POWER_BACK || playerRoomLit || this.isLightning) {
+    if (this.playerHidden) {
+      paranoiaDelta = HIDDEN_PARANOIA_RATE * delta;
+    } else if (this.phase === GamePhase.ACT1_POWER_BACK || playerRoomLit || this.isLightning) {
       paranoiaDelta = -22 * delta;
     } else {
       paranoiaDelta = (flashlightOn ? 2 : 6) * delta;
@@ -572,6 +695,15 @@ export class GameFlow {
       case GamePhase.VISITOR_NEIGHBOUR:
       case GamePhase.VISITOR_OFFICER:
       case GamePhase.VISITOR_PARTNER: {
+        if (this.searcher) {
+          this.searchTimer -= delta;
+          if (this.searchTimer <= 0) {
+            this.endSearch();
+            this.narration.showCaption('"Nobody here." The front door clicks shut.', 3.5);
+            this.visitorGoneTimer = 0;
+          }
+          break;
+        }
         if (this.forcedEntryTimer >= 0) {
           this.forcedEntryTimer -= delta;
           if (this.forcedEntryTimer <= 0) {
@@ -582,7 +714,15 @@ export class GameFlow {
           break;
         }
         const visitor = this.visitorManager.getActiveVisitor();
-        if (visitor) {
+        if (visitor && this.nobodyHomeTimer >= 0) {
+          // No answer while hiding: the visitor stops knocking and gives up after a while
+          this.nobodyHomeTimer -= delta;
+          if (this.nobodyHomeTimer <= 0) {
+            this.nobodyHomeTimer = -1;
+            this.narration.showCaption('"Nobody home." The footsteps fade down the porch.', 4.0);
+            this.visitorManager.dismissVisitor();
+          }
+        } else if (visitor) {
           this.knockTimer += delta;
           if (this.knockTimer >= 11.0) {
             this.triggerKnock();
@@ -634,6 +774,15 @@ export class GameFlow {
   public forceEntry(): void {
     this.forcedEntryTimer = -1;
     if (this.phase < GamePhase.VISITOR_NEIGHBOUR || this.phase >= GamePhase.ENDING) return;
+    if (this.playerHidden) {
+      // Nobody to confront: they search the house unless something is in plain view
+      if (this.evidence.getVisibleSeverity() > FORCED_ENTRY_SEVERITY) {
+        this.breakInAndCatch();
+      } else {
+        this.startSearch(this.visitorManager.getActiveVisitor()?.type ?? 'officer');
+      }
+      return;
+    }
     this.visitorManager.dismissVisitor();
     this.phase = GamePhase.FINAL_INSPECTION;
     this.checkEnding();

@@ -157,7 +157,11 @@
       <div id="hud-weapon" class="hud-item">
         <span class="hud-icon">🗡️</span> <span id="weapon-name">UNARMED</span>
       </div>
+      <div id="carry-status" class="hud-item hidden">Carrying: sheet</div>
     </div>
+
+    <!-- Cover-up checklist -->
+    <div id="task-list" class="task-list hidden"></div>
 
     <!-- Interaction Prompt -->
     <div id="interaction-prompt" class="interaction-prompt hidden">
@@ -197,6 +201,12 @@
   </div>
 
   <!-- Door Peephole Overlay -->
+  <!-- Hiding in the closet: dark, with a narrow horizontal slit to look through -->
+  <div id="hide-overlay" class="hide-overlay hidden">
+    <div class="hide-slit"></div>
+    <div class="peephole-hint">E / Q to step out</div>
+  </div>
+
   <div id="peephole-overlay" class="peephole-overlay hidden">
     <div class="peephole-vignette"></div>
     <div class="peephole-hint">Press <span class="key">E</span>, <span class="key">Q</span>, or Right-Click to exit peephole</div>

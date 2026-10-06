@@ -175,7 +175,8 @@ export class NpcController {
         
         // Move with collisions
         const moveDist = speed * dt;
-        this.simStep(Math.sin(-targetYaw) * moveDist, Math.cos(-targetYaw) * moveDist, dt);
+        // Straight toward the target (the old sin/cos of the facing angle flipped the z direction)
+        this.simStep((dx / d2) * moveDist, (dz / d2) * moveDist, dt);
       }
     }
     
@@ -407,6 +408,30 @@ export class NpcManager {
     }, 2000);
   }
   
+  // A visitor who let themselves in walks the given rooms in order, starting just inside the door
+  spawnSearcher(kind: 'neighbour' | 'officer' | 'partner', route: string[], onRoom: (wp: Waypoint) => void): NpcController {
+    const vis = createCharacter(kind);
+    const start = npcLayout.waypoints.find(w => w.name === 'front_door_inside')!;
+    const ctrl = new NpcController(vis, this.colliders);
+    ctrl.setPosition(start.x, 0, start.z, Math.PI);
+    this.scene.add(vis.root);
+    this.visitors.push(ctrl);
+    let leg = 0;
+    ctrl.onArrive = (wp) => {
+      onRoom(wp);
+      leg++;
+      if (leg < route.length) ctrl.walkTo(route[leg]);
+    };
+    ctrl.walkTo(route[0]);
+    return ctrl;
+  }
+
+  removeVisitor(ctrl: NpcController) {
+    this.scene.remove(ctrl.character.root);
+    ctrl.character.dispose();
+    this.visitors = this.visitors.filter(v => v !== ctrl);
+  }
+
   inviteVisitor() {
     for (const v of this.visitors) {
       v.walkTo(npcLayout.visitorStand.inside);

@@ -19,11 +19,18 @@ import { houseLayout } from '../world/houseLayout';
 import { propsLayout } from '../world/propsLayout';
 import { InteractionSystem } from './InteractionSystem';
 import { Textures } from '../world/Textures';
+import { npcLayout } from '../world/npcLayout';
 
 const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).get('debug') === '1';
 const FRONT_DOOR = new THREE.Vector3(7.4, 0, 12.0);
 const DOOR_REACH = 2.5; // how close the player must be to the front door to talk / strike
 const CONFIRM_WINDOW = 2000; // ms to press a key again to confirm (restart, flee)
+
+// Hiding spot in the walk-in closet: hiding is offered just inside its door, and the view
+// looks back out through the doorway into the master bedroom
+const CLOSET_HIDE_PROMPT = new THREE.Vector3(1.1, 4.0, 10.3);
+const CLOSET_HIDE_VIEW = { x: 1.1, y: 4.55, z: 11.3, yaw: 0, pitch: -0.05 };
+const HIDE_FADE = 0.3; // seconds
 
 const FLAVOR_TEXT: Record<string, string> = {
   phone: 'No dial tone. The storm took the line.',
@@ -68,6 +75,11 @@ export class Game {
   private peepholeManager: PeepholeManager;
 
   private bloodDecals = new Map<string, THREE.Mesh>();
+  private bedSheets = new Map<string, THREE.Mesh>();   // white top layer on each bed, hidden once taken
+  private bodySheets = new Map<string, THREE.Group>(); // sheet draped over a body
+  private hideFadeTimer = -1;
+  private hideFadeAction: (() => void) | null = null;
+  private preHide: { x: number; y: number; z: number; yaw: number; pitch: number } | null = null;
 
   private debugBoxes: THREE.Group | null = null;
   private debugArrows: THREE.Group | null = null;
@@ -119,6 +131,7 @@ export class Game {
     this.interactionSystem = new InteractionSystem(this.scene, this.hud);
 
     this.registerInteractables();
+    this.registerCoverUpInteractables();
 
     this.pauseMenu = new PauseMenu(
       () => {
@@ -145,6 +158,7 @@ export class Game {
       this.hud,
       (ending) => this.triggerEnding(ending)
     );
+    this.gameFlow.onReset = () => this.resetCoverUpVisuals();
     // The shot is fired with Dad's service pistol whether or not the player fetched it first
     this.gameFlow.onParentsShot = () => {
       this.arsenal.unlockPistol();
@@ -334,9 +348,15 @@ export class Game {
       this.interactionSystem.register({
         id: body.id,
         position: new THREE.Vector3(body.position.x, body.position.y, body.position.z),
-        promptText: () => `Hide ${body.name}'s body`,
+        promptText: () => this.gameFlow.carryingSheet && !body.isCovered ? `Cover ${body.name}'s body` : `Hide ${body.name}'s body`,
         canInteract: () => coverupStarted() ? { allowed: true } : { allowed: false, reason: 'Nothing here' },
         onInteract: () => {
+          if (this.gameFlow.carryingSheet && !body.isCovered) {
+            this.coverBody(body.id);
+            return;
+          }
+          this.bodySheets.get(body.id)?.removeFromParent();
+          this.bodySheets.delete(body.id);
           this.evidence.hideBody(body.id);
           this.gameFlow.hideParentBody(body.kind);
           this.interactionSystem.unregister(body.id);
@@ -356,7 +376,180 @@ export class Game {
   }
 
   private canUsePeephole(): boolean {
-    return this.gameFlow.phase > GamePhase.MONTAGE && this.gameFlow.phase < GamePhase.FINAL_INSPECTION;
+    return this.gameFlow.phase > GamePhase.MONTAGE && this.gameFlow.phase < GamePhase.FINAL_INSPECTION && !this.gameFlow.playerHidden;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Bedsheets and hiding
+  // ---------------------------------------------------------------------------
+
+  private registerCoverUpInteractables(): void {
+    const sheetMat = new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.95 });
+    for (const bed of propsLayout.filter(p => p.id.startsWith('bed_'))) {
+      // The bed box is d x w, turned a quarter for beds facing east or west
+      const turned = bed.facing === 'E' || bed.facing === 'W';
+      const sx = (turned ? bed.w : bed.d) - 0.12;
+      const sz = (turned ? bed.d : bed.w) - 0.12;
+      const sheet = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.04, sz), sheetMat);
+      sheet.position.set(bed.x, bed.floor * 3 + bed.h + 0.02, bed.z);
+      sheet.name = `sheet_${bed.id}`;
+      this.scene.add(sheet);
+      sheet.updateMatrixWorld(true);
+      this.bedSheets.set(bed.id, sheet);
+      this.registerSheet(bed.id);
+    }
+
+    const closetDoor = this.house.animatedDoors.find(d => d.id === 'door_closet');
+    this.interactionSystem.register({
+      id: 'hiding_spot',
+      position: CLOSET_HIDE_PROMPT.clone(),
+      promptText: () => 'Hide inside',
+      canInteract: () => {
+        if (!this.gameFlow.canHide()) return { allowed: false, reason: 'Not now' };
+        if (closetDoor && !closetDoor.isOpen) return { allowed: false, reason: 'Open the closet first' };
+        return { allowed: true };
+      },
+      onInteract: () => this.enterHiding()
+    });
+  }
+
+  private registerSheet(bedId: string): void {
+    this.interactionSystem.register({
+      id: `sheet_${bedId}`,
+      position: this.bedSheets.get(bedId)!.position.clone(),
+      promptText: () => 'Take sheet',
+      canInteract: () => this.gameFlow.carryingSheet ? { allowed: false, reason: 'Already carrying a sheet' } : { allowed: true },
+      onInteract: () => this.takeSheet(bedId)
+    });
+  }
+
+  private takeSheet(bedId: string): void {
+    const sheet = this.bedSheets.get(bedId);
+    if (!sheet || !sheet.visible || !this.gameFlow.takeSheet()) return;
+    sheet.visible = false; // bare mattress
+    this.interactionSystem.unregister(`sheet_${bedId}`);
+    this.updateCarryStatus();
+    ComicOverlays.popOnomatopoeia('FWUMP', 50, 50);
+  }
+
+  private coverBody(bodyId: string): void {
+    const body = this.evidence.getBodies().find(b => b.id === bodyId);
+    if (!body || !this.gameFlow.tryCoverBody(bodyId)) return;
+    const bleeding = this.evidence.getBloodTraces().some(t => !t.cleaned && Math.hypot(t.position.x - body.position.x, t.position.z - body.position.z) < 1.0);
+    const drape = Game.createDrapedSheet(bleeding);
+    const pose = npcLayout.deadPoses[body.kind];
+    drape.position.set(body.position.x, 0, body.position.z);
+    drape.rotation.y = pose.rotation;
+    drape.name = `drape_${bodyId}`;
+    this.scene.add(drape);
+    this.bodySheets.set(bodyId, drape);
+    this.updateCarryStatus();
+    ComicOverlays.popOnomatopoeia('COVERED', 50, 50);
+  }
+
+  // A long rounded sheet, about 0.5 x 1.5 x 0.2, gently wavy, with a blood spot if the body is bleeding
+  private static createDrapedSheet(bleeding: boolean): THREE.Group {
+    const group = new THREE.Group();
+    const geo = new THREE.BoxGeometry(0.5, 0.2, 1.5, 6, 2, 16);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      if (y > 0) {
+        // Round the top over the body and ripple it along its length
+        pos.setX(i, x * 0.8);
+        pos.setY(i, y + Math.sin(z * 7) * 0.02 - Math.abs(x) * 0.15);
+      }
+    }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.95 }));
+    mesh.position.y = 0.1;
+    group.add(mesh);
+    if (bleeding) {
+      const spot = new THREE.Mesh(new THREE.CircleGeometry(0.08, 12), new THREE.MeshBasicMaterial({ color: 0x4a0606 }));
+      spot.rotation.x = -Math.PI / 2;
+      spot.position.set(0.02, 0.21, 0.15);
+      group.add(spot);
+    }
+    return group;
+  }
+
+  private updateCarryStatus(): void {
+    const status = document.getElementById('carry-status');
+    if (!status) return;
+    status.innerText = 'Carrying: sheet';
+    status.classList.toggle('hidden', !this.gameFlow.carryingSheet);
+  }
+
+  private updateTaskList(): void {
+    const list = document.getElementById('task-list');
+    if (!list) return;
+    const show = this.gameFlow.phase >= GamePhase.ACT2_COVERUP && this.gameFlow.phase < GamePhase.FINAL_INSPECTION;
+    list.classList.toggle('hidden', !show);
+    if (!show) return;
+    list.innerHTML = this.gameFlow.getTasks()
+      .map(t => `<div class="${t.done ? 'done' : ''}">${t.done ? '☑' : '☐'} ${t.label}</div>`)
+      .join('');
+  }
+
+  // Fade out, run the change, fade back in (counted in game time, so pause holds it)
+  private hideFade(action: () => void): void {
+    if (this.hideFadeTimer > 0) return;
+    this.hud.fade(1);
+    this.hideFadeTimer = HIDE_FADE;
+    this.hideFadeAction = action;
+  }
+
+  private enterHiding(): void {
+    if (this.gameFlow.playerHidden || !this.gameFlow.canHide()) return;
+    this.interactionSystem.setEnabled(false);
+    this.player.setFrozen(true);
+    this.hideFade(() => {
+      const pos = this.player.getPosition();
+      const look = this.player.getLook();
+      this.preHide = { x: pos.x, y: pos.y, z: pos.z, ...look };
+      this.player.setPosition(CLOSET_HIDE_VIEW.x, CLOSET_HIDE_VIEW.y, CLOSET_HIDE_VIEW.z);
+      this.player.setLook(CLOSET_HIDE_VIEW.yaw, CLOSET_HIDE_VIEW.pitch);
+      document.getElementById('hide-overlay')?.classList.remove('hidden');
+      this.gameFlow.setPlayerHidden(true);
+    });
+  }
+
+  private leaveHiding(): void {
+    if (!this.gameFlow.playerHidden) return;
+    this.hideFade(() => {
+      this.clearHidingView();
+      this.gameFlow.setPlayerHidden(false);
+    });
+  }
+
+  private clearHidingView(): void {
+    document.getElementById('hide-overlay')?.classList.add('hidden');
+    if (this.preHide) {
+      this.player.setPosition(this.preHide.x, this.preHide.y, this.preHide.z);
+      this.player.setLook(this.preHide.yaw, this.preHide.pitch);
+      this.preHide = null;
+    }
+    this.player.setFrozen(false);
+    this.interactionSystem.setEnabled(true);
+  }
+
+  // Play Again: beds made, sheets gone, out of the closet
+  private resetCoverUpVisuals(): void {
+    for (const [bedId, sheet] of this.bedSheets) {
+      if (!sheet.visible) this.registerSheet(bedId);
+      sheet.visible = true;
+    }
+    for (const drape of this.bodySheets.values()) drape.removeFromParent();
+    this.bodySheets.clear();
+    this.hideFadeTimer = -1;
+    this.hideFadeAction = null;
+    this.hud.fade(0);
+    this.clearHidingView();
+    this.updateCarryStatus();
+  }
+
+  public isHidingTransition(): boolean {
+    return this.hideFadeTimer > 0;
   }
 
   private enterPeephole(): void {
@@ -526,6 +719,8 @@ export class Game {
 
   private triggerEnding(ending: EndingData): void {
     this.exitPeephole();
+    document.getElementById('hide-overlay')?.classList.add('hidden');
+    document.getElementById('task-list')?.classList.add('hidden');
     this.hud.hide();
     this.hud.hideDoorPrompt();
     this.pauseMenu.hide();
@@ -617,6 +812,12 @@ export class Game {
         this.soundManager.playLampClick();
       }
 
+      // Hidden in the closet: only E / Q (step out) work
+      if (this.gameFlow.playerHidden || this.hideFadeTimer > 0) {
+        if ((e.code === 'KeyE' || e.code === 'KeyQ') && this.hideFadeTimer <= 0) this.leaveHiding();
+        return;
+      }
+
       if (e.code === 'Digit1') {
         this.arsenal.equip('knife');
         this.hud.updateWeapon(this.arsenal.getWeapon(), this.arsenal.getPistolAmmo());
@@ -641,7 +842,7 @@ export class Game {
     });
 
     window.addEventListener('wheel', () => {
-      if (this.gameFlow.isPaused || !this.isInGame() || this.peepholeManager.isActive()) return;
+      if (this.gameFlow.isPaused || !this.isInGame() || this.peepholeManager.isActive() || this.gameFlow.playerHidden) return;
       this.arsenal.switchNext();
       this.hud.updateWeapon(this.arsenal.getWeapon(), this.arsenal.getPistolAmmo());
     });
@@ -652,7 +853,7 @@ export class Game {
         this.exitPeephole();
         return;
       }
-      if (e.button !== 0 || this.gameFlow.blockInput || this.peepholeManager.isActive()) return;
+      if (e.button !== 0 || this.gameFlow.blockInput || this.peepholeManager.isActive() || this.gameFlow.playerHidden || this.hideFadeTimer > 0) return;
       // Clicks on HUD buttons (door prompt) are handled by their own handlers
       if (document.pointerLockElement === null) return;
 
@@ -828,7 +1029,17 @@ export class Game {
     const time = this.gameTime;
 
     if (!this.gameFlow.isPaused) {
+      if (this.hideFadeTimer > 0) {
+        this.hideFadeTimer -= delta;
+        if (this.hideFadeTimer <= 0) {
+          const action = this.hideFadeAction;
+          this.hideFadeAction = null;
+          action?.();
+          this.hud.fade(0);
+        }
+      }
       this.gameFlow.update(delta, this.flashlight.isTurnedOn(), time);
+      if (this.isInGame()) this.updateTaskList();
 
       // Update Player & Flashlight
       if (this.gameFlow.phase > GamePhase.MONTAGE) {

@@ -428,6 +428,44 @@ html, body {
   100% { transform: scale(1.0); opacity: 0; }
 }
 
+/* Cover-up checklist */
+.task-list {
+  position: absolute;
+  top: 90px;
+  left: 20px;
+  z-index: 10;
+  font-family: 'Special Elite', monospace;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #f2ecdc;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid #111;
+  padding: 6px 12px;
+  pointer-events: none;
+}
+.task-list .done {
+  color: #9fd38a;
+  text-decoration: line-through;
+}
+
+/* Hiding in the closet */
+.hide-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  overflow: hidden;
+}
+.hide-slit {
+  position: absolute;
+  left: 15%;
+  width: 70%;
+  top: 46%;
+  height: 8%;
+  border-radius: 40% / 50%;
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.96), inset 0 0 30px 12px rgba(0, 0, 0, 0.9);
+}
+
 /* Peephole Overlay */
 .peephole-overlay {
   position: absolute;

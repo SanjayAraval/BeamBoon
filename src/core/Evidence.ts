@@ -13,7 +13,17 @@ export interface BodyEvidence {
   kind: 'mother' | 'father';
   position: { x: number; y: number; z: number };
   isHidden: boolean; // True if hidden inside closet or under bed
+  isCovered: boolean; // Draped with a bedsheet: still in place, but reads as "something under a sheet"
 }
+
+// How damning one piece of evidence looks to a visitor, 0..100
+export const SEVERITY = {
+  body: 100,
+  coveredBodyFactor: 0.4, // a covered body counts 40% of an uncovered one
+  bloodTrace: 60
+};
+// Above this, a visitor who gets no answer forces the door
+export const FORCED_ENTRY_SEVERITY = 50;
 
 export class Evidence {
   private totalNoise = 0;
@@ -22,6 +32,7 @@ export class Evidence {
   private bodies: BodyEvidence[] = [];
   private curtainsClosed = false;
   private pistolHidden = false;
+  private visitorSuspicion = 0; // a visitor walked past something under a sheet
 
   constructor() {
     this.reset();
@@ -34,6 +45,7 @@ export class Evidence {
     this.bodies = [];
     this.curtainsClosed = false;
     this.pistolHidden = false;
+    this.visitorSuspicion = 0;
 
     // Initial evidence from Act 1: placed where the parents fall (npcLayout.deadPoses)
     const { mother, father } = npcLayout.deadPoses;
@@ -89,13 +101,47 @@ export class Evidence {
       name,
       kind,
       position: pos,
-      isHidden: false
+      isHidden: false,
+      isCovered: false
     });
   }
 
   public hideBody(id: string): void {
     const body = this.bodies.find(b => b.id === id);
     if (body) body.isHidden = true;
+  }
+
+  // Drape a sheet over a body. It stays where it is (not hidden).
+  public coverBody(id: string): boolean {
+    const body = this.bodies.find(b => b.id === id);
+    if (!body || body.isHidden || body.isCovered) return false;
+    body.isCovered = true;
+    return true;
+  }
+
+  // 100 for a body in plain view, 40 under a sheet, 0 once hidden away
+  public getBodySeverity(id: string): number {
+    const body = this.bodies.find(b => b.id === id);
+    if (!body || body.isHidden) return 0;
+    return SEVERITY.body * (body.isCovered ? SEVERITY.coveredBodyFactor : 1);
+  }
+
+  // The worst thing a visitor could see. Both bodies and their blood lie in the front rooms
+  // (living room and foyer), in view of the windows and the front door.
+  public getVisibleSeverity(): number {
+    let worst = 0;
+    for (const b of this.bodies) worst = Math.max(worst, this.getBodySeverity(b.id));
+    if (this.getUncleanedTracesCount() > 0) worst = Math.max(worst, SEVERITY.bloodTrace);
+    return worst;
+  }
+
+  // Each body is covered or hidden
+  public areBodiesDealtWith(): boolean {
+    return this.bodies.every(b => b.isHidden || b.isCovered);
+  }
+
+  public addVisitorSuspicion(amount: number): void {
+    this.visitorSuspicion += amount;
   }
 
   public getExposedBodiesCount(): number {
@@ -127,8 +173,10 @@ export class Evidence {
     let score = 0;
     // Uncleaned blood traces add 0.25 each
     score += this.getUncleanedTracesCount() * 0.25;
-    // Exposed bodies add 0.4 each
-    score += this.getExposedBodiesCount() * 0.4;
+    // Exposed bodies add 0.4 each (a covered body 40% of that)
+    for (const b of this.bodies) score += 0.4 * (this.getBodySeverity(b.id) / SEVERITY.body);
+    // Something under a sheet that a visitor walked past
+    score += this.visitorSuspicion;
     // Open curtains add 0.15
     if (!this.curtainsClosed) score += 0.15;
     // Unhidden pistol adds 0.2

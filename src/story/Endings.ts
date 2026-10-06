@@ -10,6 +10,15 @@ export interface EndingData {
 }
 
 export class Endings {
+  public static caught(): EndingData {
+    return {
+      type: 'caught',
+      title: 'ENDING: ARRESTED',
+      story: 'Flashing red and blue lights illuminated the suburban street. Heavy boots kicked open the front door. The physical evidence left no doubt. As the handcuffs clicked shut, the dark comedy of errors reached its tragic end.',
+      comicCaption: '"A single bloodstain on the floor... and the law closed in."'
+    };
+  }
+
   public static calculateEnding(
     paranoia: number,
     evidence: Evidence
@@ -42,12 +51,7 @@ export class Endings {
 
     // 3. Caught Ending (Uncleaned evidence, high noise, or high suspicion)
     if (suspicion >= 0.5 || uncleanedTraces > 0 || exposedBodies > 0 || totalNoise >= 60) {
-      return {
-        type: 'caught',
-        title: 'ENDING: ARRESTED',
-        story: 'Flashing red and blue lights illuminated the suburban street. Heavy boots kicked open the front door. The physical evidence left no doubt. As the handcuffs clicked shut, the dark comedy of errors reached its tragic end.',
-        comicCaption: '"A single bloodstain on the floor... and the law closed in."'
-      };
+      return Endings.caught();
     }
 
     // 4. Clean Ending (Got Away With It - The Worst One)
