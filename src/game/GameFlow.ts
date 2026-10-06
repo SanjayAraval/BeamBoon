@@ -11,6 +11,7 @@ import { HUD } from '../ui/HUD';
 import { Character } from '../world/characters';
 import { ComicOverlays } from '../ui/ComicOverlays';
 import { ComicPlayer, PageDef } from '../ui/ComicPlayer';
+import { OBJECTIVES } from '../story/Objectives';
 import { findRoom } from '../world/houseLayout';
 
 export enum GamePhase {
@@ -44,7 +45,7 @@ export const ACT1_FLASHLIGHT_HINT_AFTER = 90;
 export const ACT1_GUN_HINT_AFTER = 120;
 export const ACT1_SHOOT_RANGE = 3.5;       // with the gun, on the ground floor, this close to a parent
 // Where the gun is (the gun safe in the master bedroom's walk-in closet): door comic caption and hint
-export const ACT1_GUN_LOCATION_TEXT = 'Dad keeps his gun in the master bedroom.';
+export const ACT1_GUN_LOCATION_TEXT = OBJECTIVES.gunCaption;
 // Placeholder art (scenes from the intro comic) until the real panels arrive
 export const ACT1_ARRIVAL_PAGES: PageDef[] = [
   { layout: 'stagger', panels: [
@@ -441,7 +442,7 @@ export class GameFlow {
         this.player.setYaw(Math.PI);
         // No flashlight in hand: it is in the desk drawer in the player's bedroom
         this.player.setFlashlight(this.hasFlashlight);
-        this.setObjective('Home alone. Storm outside. Stay calm.');
+        this.setObjective(OBJECTIVES.movie);
 
         this.hud.showObjective('Home alone. Storm outside. Stay calm.');
         break;
@@ -450,7 +451,7 @@ export class GameFlow {
         this.phaseTimer = 0;
         this.isPowerOn = false;
         SoundManager.getInstance().playSiren();
-        this.setObjective(this.hasFlashlight ? 'Wait. Listen.' : 'Find the flashlight');
+        this.setObjective(this.hasFlashlight ? OBJECTIVES.waitListen : OBJECTIVES.findFlashlight);
 
         this.hud.showObjective('The power is out. Find the flashlight.');
         break;
@@ -460,7 +461,7 @@ export class GameFlow {
         this.npcManager.spawnParents();
         this.narration.triggerBeat('act1_shadows');
         this.player.setFrozen(false);
-        this.setObjective(this.hasGun ? 'Go downstairs' : "Get Dad's gun");
+        this.setObjective(this.hasGun ? OBJECTIVES.goDownstairs : OBJECTIVES.getGun);
 
         this.hud.showObjective("Get Dad's gun.");
         break;
@@ -492,7 +493,7 @@ export class GameFlow {
         this.isPowerOn = true; // lights are switched off (setPhaseLighting) but the switches work again
         this.blockInput = false;
         this.narration.triggerBeat('act2_coverup');
-        this.setObjective('Cover it up before anyone comes');
+        this.setObjective(OBJECTIVES.hideBodies);
         
         this.hud.showObjective('Hide the bodies, clean the blood, close the curtains, return the gun to the safe.');
         break;
@@ -727,7 +728,8 @@ export class GameFlow {
     // Looking at a shadow is a choice (light it instead): allowed past the ambient ceiling, but within the per-second cap
     if (shadowParanoia !== 0) this.gainCapped(shadowParanoia, 'shadows', 100);
     this.hud.updateParanoia(this.paranoia);
-    
+    this.updateCoverUpObjective();
+
     if (this.paranoia >= 100 && this.phase >= GamePhase.ACT2_COVERUP && this.phase < GamePhase.ENDING) {
       this.triggerEnding(Endings.calculateEnding(100, this.evidence));
       return;
@@ -762,6 +764,7 @@ export class GameFlow {
         if (this.comic) {
           if (this.comicDone) {
             this.comicDone = false;
+            this.setObjective(this.hasGun ? OBJECTIVES.goDownstairs : OBJECTIVES.getGun);
             this.advancePhase(); // -> ACT1_ARRIVAL
           } else {
             this.comic.update(delta);
@@ -778,11 +781,11 @@ export class GameFlow {
           SoundManager.getInstance().playLampClick();
           SoundManager.getInstance().playCreak();
           this.narration.showCaption('Click. A key turns in the front door.', 2.5);
-          this.setObjective('Someone is at the front door');
+          this.setObjective(OBJECTIVES.doorUnlocks);
           this.doorUnlockTimer = ACT1_DOOR_UNLOCK_PAUSE;
         } else if (!this.hasFlashlight && this.phaseTimer >= ACT1_FLASHLIGHT_HINT_AFTER && !this.objectiveHint) {
-          this.objectiveHint = 'Check the drawers in your room';
-          this.narration.showCaption('Check the drawers in your room.', 4.0);
+          this.objectiveHint = OBJECTIVES.flashlightHint;
+          this.narration.showCaption(OBJECTIVES.flashlightHint, 4.0);
         }
         break;
       case GamePhase.ACT1_ARRIVAL: {
@@ -796,8 +799,8 @@ export class GameFlow {
         if (this.hasGun && near) {
           this.advancePhase();
         } else if (!this.hasGun && this.phaseTimer >= ACT1_GUN_HINT_AFTER && !this.objectiveHint) {
-          this.objectiveHint = ACT1_GUN_LOCATION_TEXT;
-          this.narration.showCaption(ACT1_GUN_LOCATION_TEXT, 4.0);
+          this.objectiveHint = OBJECTIVES.gunHint;
+          this.narration.showCaption(OBJECTIVES.gunHint, 4.0);
         }
         break;
       }
@@ -939,7 +942,7 @@ export class GameFlow {
     this.hasFlashlight = true;
     if (this.phase === GamePhase.ACT1_BLACKOUT && this.doorUnlockTimer < 0 && !this.comic) {
       this.objectiveHint = '';
-      this.setObjective('Wait. Listen.');
+      this.setObjective(OBJECTIVES.waitListen);
     }
   }
 
@@ -953,7 +956,7 @@ export class GameFlow {
     this.hasGun = true;
     if (this.phase === GamePhase.ACT1_ARRIVAL) {
       this.objectiveHint = '';
-      this.setObjective('Go downstairs');
+      this.setObjective(OBJECTIVES.goDownstairs);
     }
   }
 
@@ -964,6 +967,14 @@ export class GameFlow {
   // A click while the door comic plays (the pointer is locked, so the comic never sees it)
   public advanceComic(): void {
     if (this.isAct1ComicPlaying() && !this.isPaused) this.comic!.next();
+  }
+
+  // Cover-up and visitors: first the bodies, then the rest of the checklist
+  private updateCoverUpObjective(): void {
+    if (this.phase < GamePhase.ACT2_COVERUP || this.phase > GamePhase.VISITOR_PARTNER) return;
+    const tasks = this.getTasks();
+    this.objective = !this.evidence.areBodiesDealtWith() ? OBJECTIVES.hideBodies
+      : tasks.every(t => t.done) ? OBJECTIVES.allClear : OBJECTIVES.cleanUp;
   }
 
   public setObjective(text: string): void {

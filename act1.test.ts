@@ -4,6 +4,7 @@
 import { resetHeadless, isHidden, losePointerLock, comicRoot, elementText, keyDown, keyUp, pointerLockStats } from './test-support/headless';
 import { Driver } from './test-support/driver';
 import { GamePhase, ACT1_MIN_BLACKOUT, ACT1_FLASHLIGHT_HINT_AFTER, ACT1_GUN_HINT_AFTER, ACT1_ARRIVAL_PAGES } from './src/game/GameFlow';
+import { OBJECTIVES } from './src/story/Objectives';
 
 let pass = 0;
 let fail = 0;
@@ -49,16 +50,16 @@ console.log('--- RUNNING ACT 1 FLOW TEST ---');
   d.press('KeyF');
   check('F does nothing without a flashlight', !d.flashlight.isTurnedOn());
   const line = () => (document.getElementById('objective-line') as any).innerHTML as string;
-  check('The objective is on screen', !isHidden('objective-line') && line().includes('Home alone'), line());
+  check('The objective is on screen', !isHidden('objective-line') && line() === OBJECTIVES.movie, line());
 
   check('The blackout comes', d.runUntil(() => d.phase === GamePhase.ACT1_BLACKOUT, 25));
   d.run(0.1);
-  check('Objective: "Find the flashlight" (on screen)', objective(d).text === 'Find the flashlight' && line() === 'Find the flashlight', line());
+  check('From the first frame of the blackout the objective says where: desk drawer, your bedroom, upstairs', objective(d).text === OBJECTIVES.findFlashlight && line() === OBJECTIVES.findFlashlight, line());
   d.placePlayer(4.5, 1.5, 0); // the kitchen, far from the drawer
   d.run(ACT1_FLASHLIGHT_HINT_AFTER - 2);
   check(`No hint before ${ACT1_FLASHLIGHT_HINT_AFTER}s`, objective(d).hint === '');
   d.run(3);
-  check(`After ${ACT1_FLASHLIGHT_HINT_AFTER}s: hint "Check the drawers in your room" (on screen)`, objective(d).hint === 'Check the drawers in your room' && line().includes('Check the drawers in your room'));
+  check(`After ${ACT1_FLASHLIGHT_HINT_AFTER}s: a stronger hint with directions (on screen)`, objective(d).hint === OBJECTIVES.flashlightHint && line().includes(OBJECTIVES.flashlightHint) && (OBJECTIVES.flashlightHint as string) !== OBJECTIVES.findFlashlight);
   d.run(60);
   check('Still the blackout at 150s: nobody comes without the flashlight', d.phase === GamePhase.ACT1_BLACKOUT && parents(d).length === 0, d.phaseName);
 
@@ -75,7 +76,7 @@ console.log('--- RUNNING ACT 1 FLOW TEST ---');
   check('...then "[E] Take flashlight"', d.approach('drawer_player') && d.interactions.focused.promptText() === 'Take flashlight' && elementText('interaction-text') === '[E] Take flashlight', elementText('interaction-text'));
   d.press('KeyE');
   check('Flashlight taken and switched on', d.flow.hasFlashlight && d.flashlight.isTurnedOn());
-  check('Already 20s+ into the blackout: the front door unlocks', d.runUntil(() => comicRoot() !== null, 3) && objective(d).text === 'Someone is at the front door');
+  check('Already 20s+ into the blackout: the front door unlocks', d.runUntil(() => comicRoot() !== null, 3) && objective(d).text === OBJECTIVES.doorUnlocks);
   check('The door comic plays (game clock) and the player is held still', d.phase === GamePhase.ACT1_BLACKOUT && (d.player as any).frozen === true);
 
   // Pause over the door comic
@@ -93,7 +94,7 @@ console.log('--- RUNNING ACT 1 FLOW TEST ---');
   keyUp('Enter');
   check('Holding Enter skips it: the parents are in', d.runUntil(() => d.phase === GamePhase.ACT1_ARRIVAL, 3) && comicRoot() === null, d.phaseName);
   check('Two parents in the house', parents(d).length === 2 || d.runUntil(() => parents(d).length === 2, 2));
-  check('Objective: "Get Dad\'s gun"', objective(d).text === "Get Dad's gun");
+  check('Objective: "Get Dad\'s gun: master bedroom closet, upstairs."', objective(d).text === OBJECTIVES.getGun);
 }
 
 // 2. The door waits at least 20s after the blackout even with the flashlight already in hand ----
@@ -104,7 +105,9 @@ console.log('--- RUNNING ACT 1 FLOW TEST ---');
   d.run(ACT1_MIN_BLACKOUT - 1);
   check(`No knock at the door before ${ACT1_MIN_BLACKOUT}s of blackout`, comicRoot() === null && (d.flow as any).doorUnlockTimer < 0);
   check('...then the door unlocks and the comic plays', d.runUntil(() => comicRoot() !== null, 4));
-  check('The comic hands off to the arrival on its own', d.waitForArrival(30));
+  check('The gun objective shows the moment the door comic ends (before the fade into the arrival)',
+    d.runUntil(() => objective(d).text === OBJECTIVES.getGun, 30) && d.phase === GamePhase.ACT1_BLACKOUT, d.phaseName);
+  check('The comic hands off to the arrival on its own', d.waitForArrival(5));
 }
 
 // 3. No shooting before the gun; no soft lock; shooting only downstairs, near them --------------
@@ -120,9 +123,9 @@ console.log('--- RUNNING ACT 1 FLOW TEST ---');
   d.run(ACT1_GUN_HINT_AFTER - 30 - 2);
   check(`No gun hint before ${ACT1_GUN_HINT_AFTER}s`, objective(d).hint === '');
   d.run(4);
-  check(`After ${ACT1_GUN_HINT_AFTER}s: hint "Dad keeps his gun in the master bedroom."`, objective(d).hint === 'Dad keeps his gun in the master bedroom.');
+  check(`After ${ACT1_GUN_HINT_AFTER}s: a stronger hint with directions`, objective(d).hint === OBJECTIVES.gunHint && (OBJECTIVES.gunHint as string) !== OBJECTIVES.getGun);
   const captions = ACT1_ARRIVAL_PAGES.flatMap(p => p.panels.map(x => x.caption ?? ''));
-  check('Door comic caption says where the gun really is (no drawer)', captions.includes('Dad keeps his gun in the master bedroom.') && !captions.some(c => /drawer/i.test(c)));
+  check('Door comic caption says where the gun really is (no drawer)', captions.includes(OBJECTIVES.gunCaption) && !captions.some(c => /drawer/i.test(c)));
   check('No gun objective or hint mentions a drawer', !/drawer/i.test(objective(d).text + objective(d).hint));
   check('No soft lock: still the arrival, both parents alive, no ending', d.phase === GamePhase.ACT1_ARRIVAL && parents(d).length === 2 && parents(d).every(p => p.isDead === false) && isHidden('ending-screen'));
 

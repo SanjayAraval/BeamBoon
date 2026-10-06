@@ -6,6 +6,7 @@ import { resetHeadless, keyDown, keyUp, mouseMove, isHidden } from './test-suppo
 import { Driver } from './test-support/driver';
 import * as THREE from 'three';
 import { GamePhase, PARANOIA_MAX_GAIN_PER_SEC, ACT2_DARKNESS_CEILING } from './src/game/GameFlow';
+import { OBJECTIVES } from './src/story/Objectives';
 
 let pass = 0;
 let fail = 0;
@@ -87,10 +88,17 @@ for (const [mode, seed] of [['idle', 31], ['walking', 32], ['idle, flashlight of
 {
   const d = toCoverUp(35);
   const pm = (d.game as any).peepholeManager;
-  // Tidy up so each visitor can be talked away
+  // Tidy up so each visitor can be talked away; the objective follows the real checklist
+  const line = () => (document.getElementById('objective-line') as any).innerHTML as string;
+  check('Cover-up objective: "Hide the bodies: drag them (E) to a hiding spot."', d.flow.getObjective().text === OBJECTIVES.hideBodies && line() === OBJECTIVES.hideBodies, line());
   d.hideBody('body_father');
+  check('One body still out: same objective', d.flow.getObjective().text === OBJECTIVES.hideBodies);
   d.hideBody('body_mother');
+  d.run(0.1);
+  check('Both bodies hidden: "Clean up evidence and wait for visitors."', d.flow.getObjective().text === OBJECTIVES.cleanUp && line() === OBJECTIVES.cleanUp, line());
   for (const id of ['trace_0', 'trace_1', 'curtains_living', 'gun_safe']) d.interact(id);
+  d.run(0.1);
+  check('Everything done: "Everything looks normal. Wait for visitors."', d.flow.getObjective().text === OBJECTIVES.allClear);
   d.interact('switch_light_foyer');
 
   const exits = ['KeyE', 'KeyQ', 'right'] as const;
