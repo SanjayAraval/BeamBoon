@@ -21,7 +21,8 @@ code. See [CREDITS.md](CREDITS.md).
 | :--- | :--- |
 | `W` `A` `S` `D` | Move |
 | Mouse | Look around (click the game to lock the cursor) |
-| `E` | Interact: pick up, hide a body, clean blood, toggle lights, open doors, look through the peephole |
+| `E` | Interact: pick up, clean blood, toggle lights, open doors, look through the peephole |
+| `E` on a body / `E` again | Drag the body (half speed, noisy) / drop it. Drop it in the closet or next to a bed to hide it |
 | `E` twice on the rear door | Flee (run ending), during the cover-up |
 | `T` | Talk to the visitor (stand at the front door): opens the dialogue |
 | `1` / `2` / `3` or click | Dialogue: pick an answer (keep the DOUBT bar low) |

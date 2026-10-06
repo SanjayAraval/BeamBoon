@@ -886,6 +886,15 @@ export class GameFlow {
     return this.npcManager.parents.map(p => p.character.root);
   }
 
+  public getParentRoot(kind: 'mother' | 'father'): THREE.Object3D | null {
+    return this.npcManager.getParent(kind)?.character.root ?? null;
+  }
+
+  // Move a parent's body (dragging). Goes through the NPC controller, which owns the position.
+  public moveParentBody(kind: 'mother' | 'father', x: number, y: number, z: number, rotation: number): void {
+    this.npcManager.getParent(kind)?.setPosition(x, y, z, rotation);
+  }
+
   public hideParentBody(kind: 'mother' | 'father'): void {
     const parent = this.npcManager.getParent(kind);
     if (parent) parent.character.root.visible = false;

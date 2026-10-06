@@ -194,6 +194,17 @@ export class Driver {
     return result;
   }
 
+  // Grab a body (E), drag it upstairs into the walk-in closet and drop it there (E): hidden.
+  // Locomotion is scripted (placed), so the drag noise is the straight-line distance.
+  hideBody(id: string): boolean {
+    if (!this.interact(id) || (this.game as any).getDraggedBody() !== id) return false;
+    this.placePlayer(1.1, 10.4, 1);
+    this.aimAt(new THREE.Vector3(1.1, 4.6, 8)); // face out of the closet: the body trails inside
+    this.run(0.2);
+    this.press('KeyE');
+    return (this.game as any).getDraggedBody() === null && this.evidence.getBodies().find((b: any) => b.id === id)?.isHidden === true;
+  }
+
   setFlashlight(on: boolean): void {
     if (this.flashlight.isTurnedOn() !== on) this.press('KeyF');
   }

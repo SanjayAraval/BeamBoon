@@ -168,6 +168,17 @@ export class InteractionSystem {
     }
   }
 
+  // Something that moved (a dragged body): move where it can be aimed at
+  public moveInteractable(id: string, pos: THREE.Vector3): void {
+    const it = this.interactables.find(i => i.id === id);
+    if (!it) return;
+    it.position = pos.clone();
+    if (it.hitMesh) {
+      it.hitMesh.position.copy(pos);
+      it.hitMesh.updateMatrixWorld(true);
+    }
+  }
+
   public hasFocus(): boolean {
     return this.enabled && this.focused !== null;
   }

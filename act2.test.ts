@@ -88,7 +88,9 @@ for (const [mode, seed] of [['idle', 31], ['walking', 32], ['idle, flashlight of
   const d = toCoverUp(35);
   const pm = (d.game as any).peepholeManager;
   // Tidy up so each visitor can be talked away
-  for (const id of ['body_father', 'body_mother', 'trace_0', 'trace_1', 'curtains_living', 'gun_safe']) d.interact(id);
+  d.hideBody('body_father');
+  d.hideBody('body_mother');
+  for (const id of ['trace_0', 'trace_1', 'curtains_living', 'gun_safe']) d.interact(id);
   d.interact('switch_light_foyer');
 
   const exits = ['KeyE', 'KeyQ', 'right'] as const;

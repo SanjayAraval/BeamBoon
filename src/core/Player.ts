@@ -21,6 +21,7 @@ export class Player {
 
   // isLocked mirrors pointer lock; frozen is set by game logic (cutscenes, peephole)
   private locked = false;
+  private speedFactor = 1;
   private frozen = false;
   private mouseSensitivity = 0.002;
   private enableHeadBob = true;
@@ -165,7 +166,7 @@ export class Player {
   public update(delta: number, paranoia: number, onFootstep: () => void): void {
     if (!this.locked || this.frozen) return;
 
-    const speed = 3.5;
+    const speed = 3.5 * this.speedFactor;
     const moveDir = new THREE.Vector3();
     if (this.moveForward) moveDir.z -= 1;
     if (this.moveBackward) moveDir.z += 1;
@@ -274,6 +275,15 @@ export class Player {
   
   public getFloor(): number {
     return this.camera.position.y >= 3.0 ? 1 : 0;
+  }
+
+  // e.g. 0.5 while dragging a body
+  public setSpeedFactor(factor: number): void {
+    this.speedFactor = factor;
+  }
+
+  public getSpeedFactor(): number {
+    return this.speedFactor;
   }
 
   public setLook(yaw: number, pitch: number): void {

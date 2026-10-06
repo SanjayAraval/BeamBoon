@@ -144,6 +144,12 @@ export class Evidence {
     this.visitorSuspicion += amount;
   }
 
+  // A body dragged somewhere (not into a hiding place)
+  public moveBody(id: string, pos: { x: number; y: number; z: number }): void {
+    const body = this.bodies.find(b => b.id === id);
+    if (body) body.position = { ...pos };
+  }
+
   public getExposedBodiesCount(): number {
     return this.bodies.filter(b => !b.isHidden).length;
   }

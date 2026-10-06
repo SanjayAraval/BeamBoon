@@ -24,6 +24,7 @@ import { lightsLayout } from '../world/lightsLayout';
 import { ParanoiaShadows, ShadowFrame } from './ParanoiaShadows';
 import { DialogueSession, VisitorType } from './VisitorDialogue';
 import { DialogueUI } from '../ui/DialogueUI';
+import { DRAG_SPEED_FACTOR, DRAG_NOISE_PER_METER, findDropZone, trailPosition } from './BodyDrag';
 
 const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).get('debug') === '1';
 const FRONT_DOOR = new THREE.Vector3(7.4, 0, 12.0);
@@ -85,6 +86,9 @@ export class Game {
   private dialogueUI!: DialogueUI;
   private dialogue: DialogueSession | null = null;
   private dialogueCloseTimer = -1; // game clock: the last line stays up briefly before the outcome
+  private dragging: { bodyId: string; kind: 'mother' | 'father'; last: THREE.Vector3 } | null = null;
+  private dragNoise = 0;           // metres dragged not yet turned into noise
+  private visitorWasAtDoor = false;
   private hideFadeTimer = -1;
   private hideFadeAction: (() => void) | null = null;
   private preHide: { x: number; y: number; z: number; yaw: number; pitch: number } | null = null;
@@ -374,19 +378,14 @@ export class Game {
       this.interactionSystem.register({
         id: body.id,
         position: new THREE.Vector3(body.position.x, body.position.y, body.position.z),
-        promptText: () => this.gameFlow.carryingSheet && !body.isCovered ? `Cover ${body.name}'s body` : `Hide ${body.name}'s body`,
+        promptText: () => this.gameFlow.carryingSheet && !body.isCovered ? `Cover ${body.name}'s body` : 'Drag body',
         canInteract: () => coverupStarted() ? { allowed: true } : { allowed: false, reason: 'Nothing here' },
         onInteract: () => {
           if (this.gameFlow.carryingSheet && !body.isCovered) {
             this.coverBody(body.id);
             return;
           }
-          this.bodySheets.get(body.id)?.removeFromParent();
-          this.bodySheets.delete(body.id);
-          this.evidence.hideBody(body.id);
-          this.gameFlow.hideParentBody(body.kind);
-          this.interactionSystem.unregister(body.id);
-          ComicOverlays.popOnomatopoeia('HIDDEN!', 50, 50);
+          this.startDrag(body.id, body.kind);
         }
       });
     }
@@ -395,6 +394,88 @@ export class Game {
   // ---------------------------------------------------------------------------
   // Door / visitor helpers
   // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // Dragging a body
+  // ---------------------------------------------------------------------------
+
+  private startDrag(bodyId: string, kind: 'mother' | 'father'): void {
+    if (this.dragging || !this.dragAllowed()) return;
+    const root = this.gameFlow.getParentRoot(kind);
+    if (!root) return;
+    this.dragging = { bodyId, kind, last: root.position.clone() };
+    this.dragNoise = 0;
+    this.player.setSpeedFactor(DRAG_SPEED_FACTOR);
+    this.interactionSystem.setEnabled(false); // E now drops
+    ComicOverlays.popOnomatopoeia('HNNGH...', 50, 50);
+  }
+
+  // Drop where it lies. In a hiding place it counts as hidden; anywhere else it is still evidence.
+  private dropBody(): void {
+    const drag = this.dragging;
+    if (!drag) return;
+    this.dragging = null;
+    this.player.setSpeedFactor(1);
+    this.interactionSystem.setEnabled(!this.peepholeManager.isActive() && !this.gameFlow.playerHidden && !this.dialogue);
+    this.hud.hideInteractionPrompt();
+    const root = this.gameFlow.getParentRoot(drag.kind);
+    if (!root) return;
+    const floor = root.position.y >= 1.5 ? 1 : 0;
+    const zone = findDropZone(root.position.x, root.position.z, floor);
+    if (zone) {
+      this.bodySheets.get(drag.bodyId)?.removeFromParent();
+      this.bodySheets.delete(drag.bodyId);
+      this.evidence.hideBody(drag.bodyId);
+      this.gameFlow.hideParentBody(drag.kind);
+      this.interactionSystem.unregister(drag.bodyId);
+      ComicOverlays.popOnomatopoeia('HIDDEN!', 50, 50);
+    } else {
+      const pos = { x: root.position.x, y: floor * 3 + 0.2, z: root.position.z };
+      this.evidence.moveBody(drag.bodyId, pos);
+      this.interactionSystem.moveInteractable(drag.bodyId, new THREE.Vector3(pos.x, pos.y, pos.z));
+    }
+  }
+
+  private dragAllowed(): boolean {
+    const p = this.gameFlow.phase;
+    return p >= GamePhase.ACT2_COVERUP && p <= GamePhase.VISITOR_PARTNER && !this.gameFlow.blockInput &&
+      !this.peepholeManager.isActive() && !this.gameFlow.playerHidden && this.hideFadeTimer <= 0 && !this.dialogue;
+  }
+
+  private updateDrag(): void {
+    const atDoor = this.gameFlow.getVisitorManager().isVisitorAtDoor();
+    const visitorArrived = atDoor && !this.visitorWasAtDoor;
+    this.visitorWasAtDoor = atDoor;
+    const drag = this.dragging;
+    if (!drag) return;
+    // Let go when a visitor arrives, the peephole opens, a cutscene starts or the player hides
+    if (visitorArrived || !this.dragAllowed()) {
+      this.dropBody();
+      return;
+    }
+    const root = this.gameFlow.getParentRoot(drag.kind);
+    if (!root) return;
+    const pos = this.player.getPosition();
+    const floor = this.player.getFloor();
+    const t = trailPosition(pos.x, pos.z, this.player.getLook().yaw, floor);
+    this.gameFlow.moveParentBody(drag.kind, t.x, t.y, t.z, t.rotation);
+    root.visible = true;
+    this.bodySheets.get(drag.bodyId)?.position.set(t.x, t.y, t.z);
+    // Dragging is loud: every metre adds noise
+    this.dragNoise += Math.hypot(t.x - drag.last.x, t.z - drag.last.z) * DRAG_NOISE_PER_METER;
+    drag.last.set(t.x, t.y, t.z);
+    if (this.dragNoise >= 1) {
+      const whole = Math.floor(this.dragNoise);
+      this.gameFlow.recordNoise(whole);
+      this.dragNoise -= whole;
+    }
+    const zone = findDropZone(t.x, t.z, floor);
+    this.hud.showInteractionPrompt(zone ? `[E] Hide body ${zone.label}` : '[E] Drop body');
+  }
+
+  public getDraggedBody(): string | null {
+    return this.dragging?.bodyId ?? null;
+  }
 
   private isNearFrontDoor(): boolean {
     const pos = this.player.getPosition();
@@ -594,6 +675,7 @@ export class Game {
 
   private enterHiding(): void {
     if (this.gameFlow.playerHidden || !this.gameFlow.canHide()) return;
+    this.dropBody();
     this.shadows.clear();
     this.interactionSystem.setEnabled(false);
     this.player.setFrozen(true);
@@ -629,6 +711,8 @@ export class Game {
 
   // Play Again: beds made, sheets gone, out of the closet
   private resetCoverUpVisuals(): void {
+    this.dragging = null;
+    this.player.setSpeedFactor(1);
     this.closeDialogue();
     this.shadows?.clear();
     this.resetFlashlightDrawer();
@@ -693,6 +777,7 @@ export class Game {
 
   private enterPeephole(): void {
     if (this.peepholeManager.isActive()) return;
+    this.dropBody();
     this.shadows.clear();
     this.peepholeManager.enter(this.flashlight);
     this.hud.togglePeepholeMode(true);
@@ -724,6 +809,7 @@ export class Game {
   // ---------------------------------------------------------------------------
 
   private openDialogue(type: VisitorType): void {
+    this.dropBody();
     this.dialogue = new DialogueSession(type, this.evidence.getVisibleSeverity() / 100, this.evidence.calculateSuspicion());
     this.dialogueCloseTimer = -1;
     this.gameFlow.inDialogue = true;
@@ -937,6 +1023,7 @@ export class Game {
   }
 
   private triggerEnding(ending: EndingData): void {
+    this.dropBody();
     this.closeDialogue();
     this.shadows.clear();
     this.exitPeephole();
@@ -1239,6 +1326,10 @@ export class Game {
   }
 
   private handleInteraction(): void {
+    if (this.dragging) {
+      this.dropBody();
+      return;
+    }
     if (this.peepholeManager.isActive()) {
       this.exitPeephole();
       return;
@@ -1288,6 +1379,7 @@ export class Game {
         }
       }
       this.updateDialogue(delta);
+      if (this.gameFlow.phase > GamePhase.MONTAGE) this.updateDrag();
       // Shadows first, so their paranoia shares GameFlow's per-second cap this frame
       const shadowParanoia = this.shadows.update(delta, this.shadowFrame());
       this.gameFlow.update(delta, this.flashlight.isTurnedOn(), time, shadowParanoia);

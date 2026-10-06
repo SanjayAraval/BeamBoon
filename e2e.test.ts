@@ -140,8 +140,8 @@ function cleanEnding(): void {
   playAct1(d, true);
   check('Act 1 gunfire did not count as noise', d.evidence.getTotalNoise() === 0, `noise ${d.evidence.getTotalNoise()}`);
 
-  check("Hides Father's body", d.interact('body_father'));
-  check("Hides Mother's body", d.interact('body_mother'));
+  check("Drags Father's body into the closet", d.hideBody('body_father'));
+  check("Drags Mother's body into the closet", d.hideBody('body_mother'));
   check('Cleans the first blood trace', d.interact('trace_0'));
   check('Cleans the second blood trace', d.interact('trace_1'));
   check('Closes the curtains', d.interact('curtains_living'));
@@ -257,7 +257,7 @@ function bedsheets(): void {
   check('A draped sheet lies over the body, with a blood spot (still bleeding)', !!drape && drape.parent !== null && drape.children.length === 2);
   check('Covering is not hiding: the body still counts as exposed', d.evidence.getExposedBodiesCount() === 2);
   check('Second cover attempt without a sheet fails', d.flow.tryCoverBody('body_mother') === false && !body(d, 'body_mother').isCovered);
-  check('...and the body offers "Hide" instead', d.approach('body_mother') && d.interactions.focused.promptText() === "Hide Mother's body");
+  check('...and the body offers "Drag body" instead', d.approach('body_mother') && d.interactions.focused.promptText() === 'Drag body');
   check('Checklist: "Cover or hide both bodies" not done yet', task(d, 'Cover or hide both bodies').done === false);
   d.interact('sheet_bed_spare');
   d.interact('body_mother');
@@ -283,8 +283,8 @@ function hideDuringKnock(): void {
 
   startGame(d);
   playAct1(d, false);
-  d.interact('body_father');
-  d.interact('body_mother');
+  d.hideBody('body_father');
+  d.hideBody('body_mother');
   d.interact('trace_0');
   d.interact('trace_1');
   d.interact('curtains_living');
