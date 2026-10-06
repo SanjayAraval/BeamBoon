@@ -196,10 +196,16 @@ export class Driver {
 
   // Grab a body (E), drag it upstairs into the walk-in closet and drop it there (E): hidden.
   // Locomotion is scripted (placed), so the drag noise is the straight-line distance.
-  hideBody(id: string): boolean {
+  // where: 'closet' (upstairs, safe) or 'sofa' (behind the living room sofa: a search finds it)
+  hideBody(id: string, where: 'closet' | 'sofa' = 'closet'): boolean {
     if (!this.interact(id) || (this.game as any).getDraggedBody() !== id) return false;
-    this.placePlayer(1.1, 10.4, 1);
-    this.aimAt(new THREE.Vector3(1.1, 4.6, 8)); // face out of the closet: the body trails inside
+    if (where === 'closet') {
+      this.placePlayer(1.1, 10.4, 1);
+      this.aimAt(new THREE.Vector3(1.1, 4.6, 8)); // face out of the closet: the body trails inside
+    } else {
+      this.placePlayer(6.4, 8.5, 0);
+      this.aimAt(new THREE.Vector3(12, 1.6, 8.5)); // face the foyer: the body trails behind the sofa
+    }
     this.run(0.2);
     this.press('KeyE');
     return (this.game as any).getDraggedBody() === null && this.evidence.getBodies().find((b: any) => b.id === id)?.isHidden === true;

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { GamePhase } from './src/game/GameFlow';
 import { DRAG_SPEED_FACTOR, DRAG_TRAIL_DISTANCE, DRAG_NOISE_PER_METER, findDropZone, DROP_ZONES } from './src/game/BodyDrag';
 import { SEVERITY, Evidence } from './src/core/Evidence';
+import { Endings } from './src/story/Endings';
 
 let pass = 0;
 let fail = 0;
@@ -49,7 +50,7 @@ console.log('--- RUNNING BODY DRAG TEST ---');
 
 {
   const d = toCoverUp(51);
-  check('Zones: closet and under each bed, all from the existing hiding places', DROP_ZONES.map(z => z.id).join() === 'closet,under_bed_master,under_bed_player,under_bed_spare');
+  check('Zones: closet and under each bed upstairs, behind the sofa downstairs', DROP_ZONES.map(z => z.id).join() === 'closet,under_bed_master,under_bed_player,under_bed_spare,behind_sofa');
 
   // Normal speed first, in the open foyer, facing north (-z)
   d.placePlayer(8.0, 11.0, 0);
@@ -119,6 +120,27 @@ console.log('--- RUNNING BODY DRAG TEST ---');
   d.press('KeyE');
   check('Under the bed: hidden, sheet gone, severity 0', body(d, 'body_mother').isHidden && drape.parent === null && d.evidence.getBodySeverity('body_mother') === 0);
   check('No bodies left in view', d.evidence.getExposedBodiesCount() === 0 && d.evidence.getVisibleSeverity() <= SEVERITY.bloodTrace);
+}
+
+// Ground floor: behind the sofa ------------------------------------------------------------------
+{
+  const d = toCoverUp(53);
+  check('Grab Mother', d.approach('body_mother') && (d.press('KeyE'), dragged(d) === 'body_mother'));
+  d.placePlayer(6.4, 8.5, 0);
+  d.aimAt(new THREE.Vector3(12, 1.6, 8.5)); // facing the foyer, she trails behind the sofa
+  d.run(0.2);
+  check('Behind the sofa: "[E] Hide body behind the sofa"', elementText('interaction-text') === '[E] Hide body behind the sofa', elementText('interaction-text'));
+  d.press('KeyE');
+  check('Hidden: severity 0, invisible, not counted by visitors at the door',
+    body(d, 'body_mother').isHidden && d.evidence.getBodySeverity('body_mother') === 0 && !d.flow.getParentRoot('mother')!.visible && d.evidence.getExposedBodiesCount() === 1);
+  check('...but the final inspection would find it', body(d, 'body_mother').searchable && d.evidence.getBodiesFoundOnSearch() === 2);
+  check('Upstairs hiding is not found by the search', d.hideBody('body_father') && !body(d, 'body_father').searchable && d.evidence.getBodiesFoundOnSearch() === 1);
+  // With everything else tidied, the sofa body alone decides the inspection
+  for (const t of d.evidence.getBloodTraces()) d.evidence.cleanBloodTrace(t.id);
+  d.evidence.setCurtainsClosed(true);
+  d.evidence.setPistolHidden(true);
+  const result = Endings.calculateEnding(10, d.evidence);
+  check(`Otherwise clean house, one body behind the sofa: the inspection ends in ${result.type.toUpperCase()}`, result.type === 'caught' && d.evidence.getVisibleSeverity() === 0);
 }
 
 // Automatic release ---------------------------------------------------------------------------

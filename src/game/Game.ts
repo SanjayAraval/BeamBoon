@@ -425,7 +425,7 @@ export class Game {
     if (zone) {
       this.bodySheets.get(drag.bodyId)?.removeFromParent();
       this.bodySheets.delete(drag.bodyId);
-      this.evidence.hideBody(drag.bodyId);
+      this.evidence.hideBody(drag.bodyId, zone.searchable);
       this.gameFlow.hideParentBody(drag.kind);
       this.interactionSystem.unregister(drag.bodyId);
       ComicOverlays.popOnomatopoeia('HIDDEN!', 50, 50);

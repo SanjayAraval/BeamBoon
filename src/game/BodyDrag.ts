@@ -11,6 +11,7 @@ export interface DropZone {
   id: string;
   label: string; // shown in the prompt: "Hide body <label>"
   floor: number;
+  searchable: boolean; // hidden from visitors at the door, but the final inspection finds it
   xMin: number; xMax: number; zMin: number; zMax: number;
 }
 
@@ -23,14 +24,26 @@ function bedZone(bedId: string, label: string): DropZone {
   const turned = bed.facing === 'E' || bed.facing === 'W';
   const sx = (turned ? bed.w : bed.d) / 2 + BED_MARGIN;
   const sz = (turned ? bed.d : bed.w) / 2 + BED_MARGIN;
-  return { id: `under_${bedId}`, label, floor: bed.floor, xMin: bed.x - sx, xMax: bed.x + sx, zMin: bed.z - sz, zMax: bed.z + sz };
+  return { id: `under_${bedId}`, label, floor: bed.floor, searchable: false, xMin: bed.x - sx, xMax: bed.x + sx, zMin: bed.z - sz, zMax: bed.z + sz };
+}
+
+// Ground floor: the gap behind the living room sofa (its east side, toward the foyer archway).
+// Quick to reach from where the parents fall, but a search would find it.
+function behindSofaZone(): DropZone {
+  const sofa = propsLayout.find(p => p.id === 'sofa')!;
+  const turned = sofa.facing === 'E' || sofa.facing === 'W';
+  const halfX = (turned ? sofa.w : sofa.d) / 2;
+  const halfZ = (turned ? sofa.d : sofa.w) / 2;
+  return { id: 'behind_sofa', label: 'behind the sofa', floor: 0, searchable: true,
+    xMin: sofa.x + halfX, xMax: sofa.x + halfX + 1.2, zMin: sofa.z - halfZ - 0.3, zMax: sofa.z + halfZ + 0.3 };
 }
 
 export const DROP_ZONES: DropZone[] = [
-  { id: 'closet', label: 'in the closet', floor: 1, xMin: 0, xMax: 2.2, zMin: 9.8, zMax: 12 },
+  { id: 'closet', label: 'in the closet', floor: 1, searchable: false, xMin: 0, xMax: 2.2, zMin: 9.8, zMax: 12 },
   bedZone('bed_master', 'under the double bed'),
   bedZone('bed_player', 'under your bed'),
-  bedZone('bed_spare', 'under the spare bed')
+  bedZone('bed_spare', 'under the spare bed'),
+  behindSofaZone()
 ];
 
 export function findDropZone(x: number, z: number, floor: number): DropZone | null {

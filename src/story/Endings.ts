@@ -25,7 +25,7 @@ export class Endings {
   ): EndingData {
     const totalNoise = evidence.getTotalNoise();
     const uncleanedTraces = evidence.getUncleanedTracesCount();
-    const exposedBodies = evidence.getExposedBodiesCount();
+    const exposedBodies = evidence.getBodiesFoundOnSearch(); // includes bodies stashed behind the sofa
     const visitorsStruck = evidence.getVisitorsStruck();
     const suspicion = evidence.calculateSuspicion();
 
