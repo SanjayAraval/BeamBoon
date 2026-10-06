@@ -22,7 +22,7 @@ code. See [CREDITS.md](CREDITS.md).
 | `W` `A` `S` `D` | Move |
 | Mouse | Look around (click the game to lock the cursor) |
 | `E` | Interact: pick up, clean blood, toggle lights, open doors, look through the peephole |
-| `E` on a body / `E` again | Drag the body (half speed, noisy) / drop it. Drop it in the closet or next to a bed to hide it |
+| `E` on a body / `E` again | Look at a body and press `E` to drag it (half speed, noisy); `E` again drops it. Drop it on a glowing hiding spot to hide it (see below) |
 | `E` twice on the rear door | Flee (run ending), during the cover-up |
 | `T` | Talk to the visitor (stand at the front door): opens the dialogue |
 | `1` / `2` / `3` or click | Dialogue: pick an answer (keep the DOUBT bar low) |
@@ -31,11 +31,25 @@ code. See [CREDITS.md](CREDITS.md).
 | Mouse wheel | Cycle weapons |
 | `F` | Flashlight on/off |
 | `E`, `Q` or right click | Leave the peephole |
+| `M` | Mute / unmute (speaker icon, top right) |
 | `Esc` | Pause menu (Resume, Settings, Restart), also during the opening comic |
 | `R` twice | Restart |
 | Click / `Space` / `Enter` | Opening comic: next panel |
 | Hold `Enter` (or `Space`) | Skip the opening comic |
 | Hold `Space` | Skip the sofa intro |
+
+### Hiding the bodies
+
+Look at a body and press `E` to drag it, then press `E` again on a hiding spot:
+
+- behind the living room sofa (ground floor, next to where the parents fall)
+- upstairs: the master bedroom's walk-in closet
+- upstairs: under a bed (the master bed, your bed, or the spare room bed)
+
+While you drag, every hiding spot glows on the floor and the bottom of the screen names the
+nearest one and how far it is. Standing anywhere in a spot shows `[E] Hide body ...`. Dragging
+makes noise, which visitors can pick up on. If you have not touched a body a minute into the
+cover-up, the game reminds you.
 
 Debug keys (only with `?debug=1` in the URL): `N` next phase, `F3` debug overlay,
 `F4` collision boxes, `F5` teleport to the next room, `F6` log position, `F7` prop labels,

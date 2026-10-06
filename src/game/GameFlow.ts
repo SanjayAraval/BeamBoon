@@ -998,13 +998,19 @@ export class GameFlow {
   private updateCoverUpObjective(): void {
     if (this.phase < GamePhase.ACT2_COVERUP || this.phase > GamePhase.VISITOR_PARTNER) return;
     const tasks = this.getTasks();
-    this.objective = !this.evidence.areBodiesDealtWith() ? OBJECTIVES.hideBodies
+    const dealtWith = this.evidence.getBodies().filter(b => b.isHidden || b.isCovered).length;
+    this.objective = dealtWith === 0 ? OBJECTIVES.hideBodies
+      : !this.evidence.areBodiesDealtWith() ? OBJECTIVES.oneMoreBody
       : tasks.every(t => t.done) ? OBJECTIVES.allClear : OBJECTIVES.cleanUp;
   }
 
   public setObjective(text: string): void {
     this.objective = text;
     this.objectiveHint = '';
+  }
+
+  public setObjectiveHint(hint: string): void {
+    this.objectiveHint = hint;
   }
 
   public getObjective(): { text: string; hint: string } {

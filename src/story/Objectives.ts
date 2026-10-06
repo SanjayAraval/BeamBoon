@@ -20,7 +20,10 @@ export const OBJECTIVES = {
   gunCaption: 'Dad keeps his gun in the master bedroom.', // door comic caption
 
   // Act 2
-  hideBodies: 'Hide the bodies: drag them (E) to a hiding spot.',
+  hideBodies: 'Hide the bodies: look at a body, press E to drag it, then take it to a hiding spot: behind the living room sofa, or upstairs in the master bedroom walk-in closet or under a bed.',
+  oneMoreBody: 'One more body to hide.',
+  dragTutorial: 'Drag it to a hiding spot (glowing). Press E to hide it. Dragging makes noise.',
+  bodiesInTheOpen: 'The bodies are still in the open. Look at one and press E.',
   cleanUp: 'Clean up evidence and wait for visitors.',
   allClear: 'Everything looks normal. Wait for visitors.'
 } as const;

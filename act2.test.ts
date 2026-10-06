@@ -90,9 +90,10 @@ for (const [mode, seed] of [['idle', 31], ['walking', 32], ['idle, flashlight of
   const pm = (d.game as any).peepholeManager;
   // Tidy up so each visitor can be talked away; the objective follows the real checklist
   const line = () => (document.getElementById('objective-line') as any).innerHTML as string;
-  check('Cover-up objective: "Hide the bodies: drag them (E) to a hiding spot."', d.flow.getObjective().text === OBJECTIVES.hideBodies && line() === OBJECTIVES.hideBodies, line());
+  check('Cover-up objective: how to hide the bodies, and where', d.flow.getObjective().text === OBJECTIVES.hideBodies && line() === OBJECTIVES.hideBodies, line());
   d.hideBody('body_father');
-  check('One body still out: same objective', d.flow.getObjective().text === OBJECTIVES.hideBodies);
+  d.run(0.1);
+  check('One body still out: "One more body to hide."', d.flow.getObjective().text === OBJECTIVES.oneMoreBody && line() === OBJECTIVES.oneMoreBody, line());
   d.hideBody('body_mother');
   d.run(0.1);
   check('Both bodies hidden: "Clean up evidence and wait for visitors."', d.flow.getObjective().text === OBJECTIVES.cleanUp && line() === OBJECTIVES.cleanUp, line());

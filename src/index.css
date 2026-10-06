@@ -633,3 +633,19 @@ html, body {
   opacity: 1;
   filter: grayscale(1);
 }
+
+/* While dragging a body: the nearest hiding spot, small, bottom centre */
+.drag-hint {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  background: rgba(0, 0, 0, 0.7);
+  color: #ffd27a;
+  border: 1px solid rgba(255, 210, 122, 0.6);
+  padding: 4px 12px;
+  font-size: 0.95rem;
+  text-align: center;
+  pointer-events: none;
+}

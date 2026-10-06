@@ -24,7 +24,8 @@ import { lightsLayout } from '../world/lightsLayout';
 import { ParanoiaShadows, ShadowFrame } from './ParanoiaShadows';
 import { DialogueSession, VisitorType } from './VisitorDialogue';
 import { DialogueUI } from '../ui/DialogueUI';
-import { DRAG_SPEED_FACTOR, DRAG_NOISE_PER_METER, findDropZone, trailPosition } from './BodyDrag';
+import { DRAG_SPEED_FACTOR, DRAG_NOISE_PER_METER, DROP_ZONES, DropZone, findDropZone, nearestDropZone, trailPosition, zoneCenter } from './BodyDrag';
+import { OBJECTIVES } from '../story/Objectives';
 
 const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).get('debug') === '1';
 const FRONT_DOOR = new THREE.Vector3(7.4, 0, 12.0);
@@ -37,6 +38,7 @@ const CONFIRM_WINDOW = 2000; // ms to press a key again to confirm (restart, fle
 const CLOSET_HIDE_PROMPT = new THREE.Vector3(1.1, 4.0, 10.3);
 const CLOSET_HIDE_VIEW = { x: 1.1, y: 4.55, z: 11.3, yaw: 0, pitch: -0.05 };
 const HIDE_FADE = 0.3; // seconds
+export const BODY_REMINDER_AFTER = 60; // game seconds into the cover-up without touching a body
 
 const FLAVOR_TEXT: Record<string, string> = {
   phone: 'No dial tone. The storm took the line.',
@@ -89,6 +91,12 @@ export class Game {
   private dialogueCloseTimer = -1; // game clock: the last line stays up briefly before the outcome
   private dragging: { bodyId: string; kind: 'mother' | 'father'; last: THREE.Vector3 } | null = null;
   private dragNoise = 0;           // metres dragged not yet turned into noise
+  // Guidance for hiding the bodies
+  private dropMarkers: THREE.Group | null = null; // a soft ring on every hiding spot, only while dragging
+  private dragTutorialShown = false;              // the first-grab toast, once per run
+  private bodyTouched = false;                    // dragged or covered a body this run
+  private coverUpClock = 0;                       // game time in the cover-up
+  private bodyHintsShown = 0;                     // "still in the open" reminders (at 60 s and 120 s)
   private visitorWasAtDoor = false;
   private hideFadeTimer = -1;
   private hideFadeAction: (() => void) | null = null;
@@ -386,6 +394,7 @@ export class Game {
         canInteract: () => coverupStarted() ? { allowed: true } : { allowed: false, reason: 'Nothing here' },
         onInteract: () => {
           if (this.gameFlow.carryingSheet && !body.isCovered) {
+            this.bodyTouched = true;
             this.coverBody(body.id);
             return;
           }
@@ -412,6 +421,91 @@ export class Game {
     this.player.setSpeedFactor(DRAG_SPEED_FACTOR);
     this.interactionSystem.setEnabled(false); // E now drops
     ComicOverlays.popOnomatopoeia('HNNGH...', 50, 50);
+    this.bodyTouched = true;
+    this.gameFlow.setObjectiveHint('');
+    if (!this.dragTutorialShown) {
+      this.dragTutorialShown = true;
+      this.narration.showCaption(OBJECTIVES.dragTutorial, 5.0);
+    }
+    this.setDropMarkersVisible(true);
+  }
+
+  // Where a dragged body would be hidden: where it lies, or where the player stands (so the middle
+  // of a spot always works even though the body trails a metre behind)
+  private dragZone(bodyX: number, bodyZ: number, floor: number): DropZone | null {
+    const p = this.player.getPosition();
+    return findDropZone(bodyX, bodyZ, floor) ?? findDropZone(p.x, p.z, this.player.getFloor());
+  }
+
+  private buildDropMarkers(): THREE.Group {
+    const group = new THREE.Group();
+    group.name = 'drop_zone_markers';
+    for (const zn of DROP_ZONES) {
+      const c = zoneCenter(zn);
+      const rx = (zn.xMax - zn.xMin) / 2;
+      const rz = (zn.zMax - zn.zMin) / 2;
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.88, 1, 48),
+        new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide })
+      );
+      const fill = new THREE.Mesh(
+        new THREE.CircleGeometry(0.88, 48),
+        new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.06, depthWrite: false, side: THREE.DoubleSide })
+      );
+      ring.userData.ring = true;
+      for (const m of [ring, fill]) {
+        m.rotation.x = -Math.PI / 2;
+        m.scale.set(rx, rz, 1); // after the rotation, local y lies along world z
+        m.position.set(c.x, zn.floor * 3 + 0.03, c.z);
+        m.name = 'drop_marker_' + zn.id;
+        m.renderOrder = 2;
+        group.add(m);
+      }
+    }
+    group.visible = false;
+    this.scene.add(group);
+    return group;
+  }
+
+  private setDropMarkersVisible(on: boolean): void {
+    if (!this.dropMarkers) this.dropMarkers = this.buildDropMarkers();
+    this.dropMarkers.visible = on;
+    document.getElementById('drag-hint')?.classList.toggle('hidden', !on);
+  }
+
+  public areDropMarkersVisible(): boolean {
+    return !!this.dropMarkers && this.dropMarkers.visible;
+  }
+
+  // While dragging: pulse the markers and name the nearest spot
+  private updateDragGuidance(): void {
+    if (!this.dropMarkers) return;
+    const pulse = 0.5 + 0.5 * Math.sin(this.gameTime * 3);
+    for (const m of this.dropMarkers.children as THREE.Mesh[]) {
+      (m.material as THREE.MeshBasicMaterial).opacity = m.userData.ring ? 0.25 + 0.3 * pulse : 0.04 + 0.05 * pulse;
+    }
+    const p = this.player.getPosition();
+    const { zone, distance } = nearestDropZone(p.x, p.z, this.player.getFloor());
+    const text = `Nearest hiding spot: ${zone.name}, ${Math.round(distance)} m`;
+    const el = document.getElementById('drag-hint');
+    if (el && el.innerText !== text) el.innerText = text;
+  }
+
+  // Nobody has touched a body a minute into the cover-up: say what to do (twice at most)
+  private updateBodyReminder(delta: number): void {
+    const p = this.gameFlow.phase;
+    if (p < GamePhase.ACT2_COVERUP || p > GamePhase.VISITOR_PARTNER) return;
+    this.coverUpClock += delta;
+    if (this.bodyTouched || this.evidence.areBodiesDealtWith() || this.bodyHintsShown >= 2) return;
+    if (this.coverUpClock >= BODY_REMINDER_AFTER * (this.bodyHintsShown + 1)) {
+      this.bodyHintsShown++;
+      this.narration.showCaption(OBJECTIVES.bodiesInTheOpen, 5.0);
+      this.gameFlow.setObjectiveHint(OBJECTIVES.bodiesInTheOpen);
+    }
+  }
+
+  public getBodyHintsShown(): number {
+    return this.bodyHintsShown;
   }
 
   // Drop where it lies. In a hiding place it counts as hidden; anywhere else it is still evidence.
@@ -419,13 +513,14 @@ export class Game {
     const drag = this.dragging;
     if (!drag) return;
     this.dragging = null;
+    this.setDropMarkersVisible(false);
     this.player.setSpeedFactor(1);
     this.interactionSystem.setEnabled(!this.peepholeManager.isActive() && !this.gameFlow.playerHidden && !this.dialogue);
     this.hud.hideInteractionPrompt();
     const root = this.gameFlow.getParentRoot(drag.kind);
     if (!root) return;
     const floor = root.position.y >= 1.5 ? 1 : 0;
-    const zone = findDropZone(root.position.x, root.position.z, floor);
+    const zone = this.dragZone(root.position.x, root.position.z, floor);
     if (zone) {
       this.bodySheets.get(drag.bodyId)?.removeFromParent();
       this.bodySheets.delete(drag.bodyId);
@@ -473,8 +568,9 @@ export class Game {
       this.gameFlow.recordNoise(whole);
       this.dragNoise -= whole;
     }
-    const zone = findDropZone(t.x, t.z, floor);
+    const zone = this.dragZone(t.x, t.z, floor);
     this.hud.showInteractionPrompt(zone ? `[E] Hide body ${zone.label}` : '[E] Drop body');
+    this.updateDragGuidance();
   }
 
   public getDraggedBody(): string | null {
@@ -744,6 +840,11 @@ export class Game {
   // Play Again: beds made, sheets gone, out of the closet
   private resetCoverUpVisuals(): void {
     this.dragging = null;
+    this.setDropMarkersVisible(false);
+    this.dragTutorialShown = false;
+    this.bodyTouched = false;
+    this.coverUpClock = 0;
+    this.bodyHintsShown = 0;
     this.player.setSpeedFactor(1);
     this.closeDialogue();
     this.shadows?.clear();
@@ -1420,6 +1521,7 @@ export class Game {
       }
       this.updateDialogue(delta);
       if (this.gameFlow.phase > GamePhase.MONTAGE) this.updateDrag();
+      this.updateBodyReminder(delta);
       // Shadows first, so their paranoia shares GameFlow's per-second cap this frame
       const shadowParanoia = this.shadows.update(delta, this.shadowFrame());
       this.gameFlow.update(delta, this.flashlight.isTurnedOn(), time, shadowParanoia);
