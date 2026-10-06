@@ -1,131 +1,116 @@
-import { GameFlow, GamePhase } from './src/game/GameFlow';
-import { Player } from './src/core/Player';
-import { Flashlight } from './src/core/Flashlight';
-import * as THREE from 'three';
+// Pause test: the real Game, the real PauseMenu (#pause-overlay and its buttons) and the real
+// frame clock, driven headless on a simulated wall clock. Pausing is triggered the way the
+// browser does it (pointer lock lost on Esc) and resumed with the Resume button.
 
-// Mock DOM for Player
-(global as any).document = {
-  getElementById: (id: string) => {
-    if (id === 'webgl-canvas') return { requestPointerLock: () => {} };
-    return null;
-  },
-  addEventListener: () => {}
-};
-(global as any).window = {
-  addEventListener: () => {}
-};
+import { simClock, losePointerLock, isHidden, keyDown, keyUp, reloads, resetHeadless } from './test-support/headless';
+import { Driver, FRAME } from './test-support/driver';
+import { GamePhase } from './src/game/GameFlow';
+import { MAX_FRAME_DELTA } from './src/game/Game';
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera();
-const flashlight = new Flashlight(scene, camera);
-
-// We need a dummy object for house and others to instantiate GameFlow
-const mockHouse = {
-  lightManager: {
-    turnOffAll: () => {},
-    turnOnAll: () => {},
-    isRoomLit: () => false
-  }
-} as any;
-
-const mockNarration = {
-  showCaption: () => {},
-  hideCaption: () => {}
-} as any;
-
-const mockSound = {
-  playEffect: () => {},
-  playFootstep: () => {},
-  startHeartbeat: () => {},
-  stopHeartbeat: () => {}
-} as any;
-
-const mockHud = {
-  updateParanoia: () => {},
-  showPhaseText: () => {},
-  hidePhaseText: () => {},
-  updateWeapon: () => {},
-  showCrosshair: () => {},
-  hideCrosshair: () => {}
-} as any;
-
-const mockEvidence = {} as any;
-const player = new Player(camera);
-const gameFlow = new GameFlow(scene, mockHouse, player, mockEvidence, mockNarration, mockHud, () => {});
-
-let gameTime = 0;
-let timeDelta = 0.1; // 100ms per frame
-
-function tick(realDelta: number) {
-  const delta = gameFlow.isPaused ? 0 : realDelta;
-  if (!gameFlow.isPaused) {
-    gameTime += delta;
-    gameFlow.update(delta, flashlight.isTurnedOn(), gameTime);
-    player.update(delta, gameFlow.paranoia, () => {});
-  }
+let pass = 0;
+let fail = 0;
+function check(desc: string, cond: boolean, detail = ''): void {
+  console.log(`[${cond ? 'PASS' : 'FAIL'}] ${desc}${!cond && detail ? ` (${detail})` : ''}`);
+  if (cond) pass++; else fail++;
 }
 
-// TEST 1: Normal Time progression
-gameFlow.phase = GamePhase.ACT1_BLACKOUT;
-(gameFlow as any).phaseTimer = 0;
+// Wall time passes and the browser keeps rendering frames (pause menu on screen)
+function wallFrames(d: Driver, seconds: number): void {
+  d.run(seconds);
+}
 
-tick(0.1);
-tick(0.1);
-const beforePauseTimer = (gameFlow as any).phaseTimer;
+resetHeadless();
+Math.random = () => 0.5;
+const d = new Driver();
+const game = d.game;
+const pauseMenu = (game as any).pauseMenu;
 
-if (beforePauseTimer !== 0.2) {
-  console.log(`FAIL: Expected timer to be 0.2, got ${beforePauseTimer}`);
+// Esc on the title screen is not a pause
+losePointerLock();
+check('No pause on the title screen', !d.flow.isPaused && isHidden('pause-overlay'));
+
+d.clickButton('btn-start');
+d.holdKey('Enter', 1.3);
+d.run(1.0);
+d.holdKey('Space', 1.2);
+d.run(1.0);
+check('Reached free roam (ACT1_MOVIE) with pointer lock', d.phase === GamePhase.ACT1_MOVIE && d.player.isLocked);
+
+d.run(2.0);
+const clockBefore = game.getGameTime();
+const timerBefore = (d.flow as any).phaseTimer;
+check('Game clock runs while playing', timerBefore > 1.9, `phaseTimer ${timerBefore}`);
+
+// --- Pause -----------------------------------------------------------------------------
+losePointerLock();
+check('Losing pointer lock (Esc) pauses the game', d.flow.isPaused);
+check('Pause menu is visible', pauseMenu.isVisible() && !isHidden('pause-overlay'));
+
+const pos = d.player.getPosition().clone();
+const paranoia = d.flow.paranoia;
+const flashlightOn = d.flashlight.isTurnedOn();
+keyDown('KeyW');
+d.press('KeyF');
+wallFrames(d, 30); // longer than the 20s movie phase
+keyUp('KeyW');
+
+check('Game clock is frozen while paused', game.getGameTime() === clockBefore, `${game.getGameTime()} vs ${clockBefore}`);
+check('Phase timer is frozen while paused', (d.flow as any).phaseTimer === timerBefore);
+check('Phase does not advance while paused (20s movie timer, 30s paused)', d.phase === GamePhase.ACT1_MOVIE, d.phaseName);
+check('Paranoia does not change while paused', d.flow.paranoia === paranoia);
+check('Movement keys are ignored while paused', d.player.getPosition().equals(pos) && d.player.getKeyStates() === 'NONE');
+check('Flashlight key is ignored while paused', d.flashlight.isTurnedOn() === flashlightOn);
+
+// --- Resume ----------------------------------------------------------------------------
+// The tab was hidden for a minute: no frames rendered, but wall time moved on
+simClock.advance(60);
+d.clickButton('btn-resume');
+check('Resume button re-locks the pointer and unpauses', !d.flow.isPaused && d.player.isLocked);
+check('Pause menu is hidden after resume', !pauseMenu.isVisible() && isHidden('pause-overlay'));
+d.settle();
+check('Time spent paused is not fed into the first frame back', game.getGameTime() === clockBefore, `jumped ${game.getGameTime() - clockBefore}s`);
+
+d.run(1.0);
+const advanced = game.getGameTime() - clockBefore;
+check('Game clock runs again after resume', Math.abs(advanced - 1.0) < FRAME, `advanced ${advanced}`);
+d.holdKey('KeyW', 0.5);
+check('Movement works again after resume', !d.player.getPosition().equals(pos));
+
+// --- Frame hitch -----------------------------------------------------------------------
+const t0 = game.getGameTime();
+simClock.advance(5);
+d.settle();
+check(`A 5s hitch advances the game by at most ${MAX_FRAME_DELTA}s`, Math.abs(game.getGameTime() - t0 - MAX_FRAME_DELTA) < 1e-9);
+
+// --- A visitor forcing their way in waits for the player to come back ------------------
+d.runUntil(() => d.phase === GamePhase.ACT2_COVERUP, 80);
+d.placePlayer(7.4, 10.6, 0);
+d.interact('switch_light_foyer');
+d.placePlayer(7.4, 10.6, 0);
+check('A visitor knocks', d.runUntil(() => d.flow.getVisitorManager().isVisitorAtDoor(), 120), d.phaseName);
+d.flow.scheduleForcedEntry(2.0);
+losePointerLock();
+wallFrames(d, 10);
+check('Paused: the forced entry does not happen', d.phase !== GamePhase.ENDING && d.phase !== GamePhase.FINAL_INSPECTION, d.phaseName);
+d.clickButton('btn-resume');
+d.run(2.2);
+check('After resume the visitor pushes in on the game clock', d.phase === GamePhase.ENDING, d.phaseName);
+
+// --- Restart from the pause menu -------------------------------------------------------
+resetHeadless();
+const d2 = new Driver();
+d2.clickButton('btn-start');
+d2.holdKey('Enter', 1.3);
+d2.run(1.0);
+d2.holdKey('Space', 1.2);
+d2.run(1.0);
+losePointerLock();
+d2.clickButton('btn-restart');
+check('Restart button in the pause menu reloads the game', reloads.count === 1);
+
+console.log(pass + ' PASS, ' + fail + ' FAIL');
+if (fail > 0) {
   process.exit(1);
-} else {
-  console.log("PASS: Simulated clock progresses normally.");
 }
-
-// TEST 2: Pausing stops the clock
-gameFlow.isPaused = true;
-player.setLocked(false); // Simulate pointer lock lost
-
-tick(0.1);
-tick(0.1);
-tick(0.1);
-
-if ((gameFlow as any).phaseTimer !== 0.2) {
-  console.log(`FAIL: Timer should not progress while paused! Got ${(gameFlow as any).phaseTimer}`);
-  process.exit(1);
-} else {
-  console.log("PASS: Pausing stops the simulated clock and game logic.");
-}
-
-// TEST 3: No input accepted while paused
-// Simulate a keypress logic (similar to Player's onKeyDown but via our mock)
-const keyboardEvent = { code: 'KeyW' } as KeyboardEvent;
-(player as any).onKeyDown(keyboardEvent);
-
-if (player.getKeyStates() !== 'NONE') {
-  console.log(`FAIL: Input was accepted while paused/unlocked! Keys: ${player.getKeyStates()}`);
-  process.exit(1);
-} else {
-  console.log("PASS: No input is accepted while paused.");
-}
-
-// TEST 4: Resuming restarts clock and input
-gameFlow.isPaused = false;
-player.setLocked(true);
-
-tick(0.1);
-
-if (Math.abs((gameFlow as any).phaseTimer - 0.3) > 0.0001) {
-  console.log(`FAIL: Timer should resume! Got ${(gameFlow as any).phaseTimer}`);
-  process.exit(1);
-} else {
-  console.log("PASS: Resuming restarts the clock.");
-}
-
-(player as any).onKeyDown(keyboardEvent);
-if (player.getKeyStates() !== 'W') {
-  console.log(`FAIL: Input should be accepted after resume! Keys: ${player.getKeyStates()}`);
-  process.exit(1);
-} else {
-  console.log("PASS: Input is accepted after resume.");
-}
-
-console.log("=== PAUSE TESTS PASSED ===");
+console.log('=== PAUSE TESTS PASSED ===');
+process.exit(0);
