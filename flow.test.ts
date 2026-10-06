@@ -152,10 +152,19 @@ assert('Pause stops intro clock', gameFlow.phase === GamePhase.ACT1_INTRO);
 gameFlow.setPaused(false);
 assert('Waited for ACT1_MOVIE naturally', waitUntilPhase(GamePhase.ACT1_MOVIE, 26));
 
-// --- 5. Breakdown ending --------------------------------------------------------------------
-gameFlow.advancePhase(); waitUntilPhase(GamePhase.ACT1_BLACKOUT, 2);
-gameFlow.advancePhase(); waitUntilPhase(GamePhase.ACT1_ARRIVAL, 2);
-gameFlow.advancePhase(); waitUntilPhase(GamePhase.ACT1_SHOOTING, 2);
+// --- 5. Act 1 waits for the flashlight, then the gun ----------------------------------------
+assert('The movie ends in the blackout by itself', waitUntilPhase(GamePhase.ACT1_BLACKOUT, 22));
+assert('No flashlight: the blackout never ends (60s)', !waitUntilPhase(GamePhase.ACT1_ARRIVAL, 60));
+gameFlow.takeFlashlight();
+assert('Flashlight found: door unlock, door comic, then the parents arrive', waitUntilPhase(GamePhase.ACT1_ARRIVAL, 30));
+assert('No gun: the arrival never turns into the shooting (130s)', !waitUntilPhase(GamePhase.ACT1_SHOOTING, 130));
+gameFlow.handlePlayerAttack();
+assert('Attacking without the gun does nothing', gameFlow.phase === GamePhase.ACT1_ARRIVAL);
+gameFlow.takeGun();
+gameFlow.handlePlayerAttack();
+assert('With the gun, attacking starts the shooting', gameFlow.phase === GamePhase.ACT1_SHOOTING);
+
+// --- 6. Breakdown ending --------------------------------------------------------------------
 gameFlow.advancePhase(); waitUntilPhase(GamePhase.ACT1_POWER_BACK, 2);
 gameFlow.advancePhase(); waitUntilPhase(GamePhase.ACT2_COVERUP, 2);
 

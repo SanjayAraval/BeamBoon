@@ -56,7 +56,8 @@ function newGame(seed: number, toCoverUp = true): Driver {
   d.clickButton('btn-resume'); // "Click to continue" after the comic
   if (toCoverUp) {
     d.holdKey('Space', 1.2);
-    d.runUntil(() => d.phase === GamePhase.ACT2_COVERUP, 70);
+    d.runUntil(() => d.phase === GamePhase.ACT1_MOVIE, 3);
+    d.playThroughAct1();
     d.run(0.5);
   }
   return d;
@@ -136,16 +137,26 @@ console.log('--- RUNNING PARANOIA SHADOWS TEST ---');
   d.holdKey('Space', 1.2);
   d.runUntil(() => d.phase === GamePhase.ACT1_MOVIE, 3);
   const seen = new Set<string>();
-  const frames = Math.round(70 / FRAME);
-  for (let i = 0; i < frames && d.phase < GamePhase.ACT1_POWER_BACK; i++) {
-    if (d.phase === GamePhase.ACT1_MOVIE || d.phase === GamePhase.ACT1_BLACKOUT || d.phase === GamePhase.ACT1_ARRIVAL) {
-      d.placePlayer(KITCHEN.x, KITCHEN.z, 0);
-      d.setFlashlight(false);
+  // Paranoia pinned high, in the dark kitchen whenever the player is free to stand there
+  const darkAndTense = (seconds: number, until: () => boolean) => {
+    const frames = Math.round(seconds / FRAME);
+    for (let i = 0; i < frames && !until(); i++) {
+      if (d.phase === GamePhase.ACT1_MOVIE || d.phase === GamePhase.ACT1_BLACKOUT || (d.phase === GamePhase.ACT1_ARRIVAL && !d.flow.hasGun)) {
+        d.placePlayer(KITCHEN.x, KITCHEN.z, 0);
+        if (d.flow.hasFlashlight) d.setFlashlight(false);
+      }
+      seen.add(GamePhase[d.phase]);
+      d.flow.paranoia = 80;
+      d.run(FRAME);
     }
-    seen.add(GamePhase[d.phase]);
-    d.flow.paranoia = 80;
-    d.run(FRAME);
-  }
+  };
+  darkAndTense(15, () => false);                        // the movie
+  d.takeFlashlight();
+  darkAndTense(90, () => d.phase === GamePhase.ACT1_ARRIVAL); // blackout and the door comic
+  darkAndTense(20, () => false);                        // the parents sway downstairs
+  d.takeGun();
+  d.placePlayer(5.0, 9.35, 0);
+  darkAndTense(20, () => d.phase >= GamePhase.ACT1_POWER_BACK);
   check(`Played through ${[...seen].join(', ')}`, ['ACT1_MOVIE', 'ACT1_BLACKOUT', 'ACT1_ARRIVAL', 'ACT1_SHOOTING'].every(p => seen.has(p)));
   check('No shadows anywhere in Act 1 before the power comes back (paranoia 80, in the dark)', sh.stats.spawned === 0, `${sh.stats.spawned} spawned`);
   check('Shadows are allowed again from ACT1_POWER_BACK onward', d.runUntil(() => d.phase === GamePhase.ACT2_COVERUP, 10) && (d.game as any).shadowFrame().active === true);

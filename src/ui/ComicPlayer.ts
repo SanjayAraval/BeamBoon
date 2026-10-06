@@ -11,8 +11,8 @@ import { SCENES } from './comicArt';
 
 type Bubble = { x: number; y: number; w?: number; text: string; tail?: 'dl' | 'dr' | 'ul' | 'ur' | 'none'; kind?: 'say' | 'think' | 'shout' };
 type Sfx = { text: string; x: number; y: number; rot?: number; size?: number; color?: 'yellow' | 'white' | 'black' };
-interface PanelDef { scene: number; caption?: string; bubbles?: Bubble[]; sfx?: Sfx; cue?: string; dur?: number; motion?: 'in' | 'left' | 'right' | 'up'; origin?: string; }
-interface PageDef { layout: 'stagger' | 'stagger2' | 'full'; panels: PanelDef[]; }
+export interface PanelDef { scene: number; caption?: string; bubbles?: Bubble[]; sfx?: Sfx; cue?: string; dur?: number; motion?: 'in' | 'left' | 'right' | 'up'; origin?: string; }
+export interface PageDef { layout: 'stagger' | 'stagger2' | 'full'; panels: PanelDef[]; }
 
 export const COMIC_PAGES: PageDef[] = [
   { layout: 'stagger', panels: [
@@ -96,6 +96,7 @@ export interface ComicOptions {
   onDone?: () => void;
   injectFonts?: boolean;       // load Bangers + Comic Neue + Special Elite from Google Fonts (OFL). Default true.
   autoAdvance?: boolean;       // default true
+  pages?: PageDef[];           // play these pages instead of the intro comic
 }
 
 export class ComicPlayer {
@@ -121,10 +122,12 @@ export class ComicPlayer {
   private cleanup: Array<() => void> = [];
   private opts: ComicOptions;
   private started = false;
+  private pages: PageDef[];
 
   constructor(parent: HTMLElement, opts: ComicOptions = {}) {
     this.opts = { autoAdvance: true, injectFonts: true, ...opts };
-    COMIC_PAGES.forEach((p, pi) => p.panels.forEach((def, idx) => this.beats.push({ page: pi, idx, def })));
+    this.pages = opts.pages ?? COMIC_PAGES;
+    this.pages.forEach((p, pi) => p.panels.forEach((def, idx) => this.beats.push({ page: pi, idx, def })));
     if (!document.getElementById('cmc-css')) { const s = document.createElement('style'); s.id = 'cmc-css'; s.textContent = CSS; document.head.appendChild(s); }
     if (this.opts.injectFonts && !document.getElementById('cmc-fonts')) {
       const l = document.createElement('link'); l.id = 'cmc-fonts'; l.rel = 'stylesheet';
@@ -212,7 +215,7 @@ export class ComicPlayer {
   private buildPage(pi: number) {
     this.stage.innerHTML = ''; this.panels = [];
     const page = document.createElement('div'); page.className = 'cmc-page';
-    const pg = COMIC_PAGES[pi]; const lay = LAYOUTS[pg.layout];
+    const pg = this.pages[pi]; const lay = LAYOUTS[pg.layout];
     pg.panels.forEach((def, k) => {
       const p = document.createElement('div'); p.className = 'cmc-panel' + (pg.layout === 'full' ? ' full' : '');
       for (const [key, v] of Object.entries(lay[k])) key.startsWith('--') ? p.style.setProperty(key, v) : (p.style as any)[key] = v;

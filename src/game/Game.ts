@@ -135,6 +135,7 @@ export class Game {
 
     this.registerInteractables();
     this.registerCoverUpInteractables();
+    this.registerFlashlightDrawer();
 
     this.pauseMenu = new PauseMenu(
       () => {
@@ -146,6 +147,7 @@ export class Game {
       () => location.reload()
     );
 
+    if (this.flashlight.isTurnedOn()) this.flashlight.toggle(); // no flashlight until it is found
     this.player.onSetFlashlight = (on) => {
       if (this.flashlight.isTurnedOn() !== on) {
         this.flashlight.toggle();
@@ -233,7 +235,9 @@ export class Game {
           this.interactionSystem.unregister(prop.id);
         };
       } else if (type === 'gun_safe' || type === 'pistol_closet') {
-        promptTextFn = () => this.arsenal.ownsPistol() ? `Lock the pistol in the ${prop.name}` : `Take the service pistol from the ${prop.name}`;
+        promptTextFn = () => this.arsenal.ownsPistol() ? `Lock the pistol in the ${prop.name}` : 'Take gun';
+        // Dad's gun is locked away until the parents are in the house
+        canInteractFn = () => this.arsenal.ownsPistol() || this.gameFlow.isGunAvailable() ? { allowed: true } : { allowed: false, reason: 'Locked' };
         interactFn = () => {
           if (this.arsenal.ownsPistol()) {
             this.arsenal.removePistol();
@@ -242,6 +246,7 @@ export class Game {
           } else {
             this.arsenal.unlockPistol();
             this.evidence.setPistolHidden(false);
+            this.gameFlow.takeGun();
             ComicOverlays.popOnomatopoeia('SERVICE PISTOL!', 50, 50);
           }
           this.hud.updateWeapon(this.arsenal.getWeapon(), this.arsenal.getPistolAmmo());
@@ -392,6 +397,73 @@ export class Game {
   // ---------------------------------------------------------------------------
   // Bedsheets and hiding
   // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // Act 1: the flashlight in the desk drawer (player bedroom), the objective line
+  // ---------------------------------------------------------------------------
+
+  private drawer: THREE.Mesh | null = null;
+  private drawerFlashlight: THREE.Mesh | null = null;
+  private drawerOpen = false;
+
+  private registerFlashlightDrawer(): void {
+    const desk = propsLayout.find(p => p.id === 'desk_player')!;
+    const top = desk.floor * 3 + desk.h;
+    const front = desk.z + desk.w / 2; // the desk faces south (+z)
+    this.drawer = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.45), new THREE.MeshStandardMaterial({ color: 0x4a3322 }));
+    this.drawer.position.set(desk.x, top - 0.12, front - 0.2);
+    this.drawer.name = 'drawer_player';
+    this.scene.add(this.drawer);
+    this.drawerFlashlight = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.24, 10), new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.6 }));
+    this.drawerFlashlight.rotation.z = Math.PI / 2;
+    this.drawerFlashlight.position.set(0, 0.09, 0);
+    this.drawer.add(this.drawerFlashlight);
+
+    this.interactionSystem.register({
+      id: 'drawer_player',
+      position: new THREE.Vector3(desk.x, top - 0.12, front + 0.15),
+      promptText: () => !this.drawerOpen ? 'Open drawer' : !this.gameFlow.hasFlashlight ? 'Take flashlight' : 'Close drawer',
+      onInteract: () => {
+        if (!this.drawerOpen) {
+          this.setDrawerOpen(true);
+        } else if (!this.gameFlow.hasFlashlight) {
+          this.gameFlow.takeFlashlight();
+          if (this.drawerFlashlight) this.drawerFlashlight.visible = false;
+          this.player.setFlashlight(true);
+          this.soundManager.playLampClick();
+          ComicOverlays.popOnomatopoeia('FLASHLIGHT!', 50, 50);
+        } else {
+          this.setDrawerOpen(false);
+        }
+      }
+    });
+  }
+
+  private setDrawerOpen(open: boolean): void {
+    if (!this.drawer) return;
+    this.drawerOpen = open;
+    this.drawer.position.z += open ? 0.35 : -0.35;
+    this.drawer.updateMatrixWorld(true);
+    this.soundManager.playLampClick();
+  }
+
+  private resetFlashlightDrawer(): void {
+    if (this.drawerOpen) this.setDrawerOpen(false);
+    if (this.drawerFlashlight) this.drawerFlashlight.visible = true;
+    if (this.flashlight.isTurnedOn()) this.flashlight.toggle();
+    this.hud.updateFlashlight(false);
+  }
+
+  private updateObjectiveLine(): void {
+    const el = document.getElementById('objective-line');
+    if (!el) return;
+    const { text, hint } = this.gameFlow.getObjective();
+    const show = this.isInGame() && text !== '';
+    el.classList.toggle('hidden', !show);
+    if (!show) return;
+    const html = hint ? `${text}<span class="hint">${hint}</span>` : text;
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }
 
   private registerCoverUpInteractables(): void {
     const sheetMat = new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.95 });
@@ -547,6 +619,7 @@ export class Game {
   // Play Again: beds made, sheets gone, out of the closet
   private resetCoverUpVisuals(): void {
     this.shadows?.clear();
+    this.resetFlashlightDrawer();
     for (const [bedId, sheet] of this.bedSheets) {
       if (!sheet.visible) this.registerSheet(bedId);
       sheet.visible = true;
@@ -864,7 +937,9 @@ export class Game {
 
       if (!this.isInGame()) return;
 
-      if (e.code === 'KeyF') {
+      if (e.code === 'KeyF' && !this.gameFlow.hasFlashlight) {
+        this.hud.flashInteractionPrompt("You don't have a flashlight");
+      } else if (e.code === 'KeyF') {
         const isOn = this.flashlight.toggle();
         this.hud.updateFlashlight(isOn);
         this.soundManager.playLampClick();
@@ -909,6 +984,10 @@ export class Game {
       if (this.gameFlow.isPaused || !this.isInGame()) return;
       if (e.button === 2) {
         this.exitPeephole();
+        return;
+      }
+      if (e.button === 0 && this.gameFlow.isAct1ComicPlaying()) {
+        this.gameFlow.advanceComic();
         return;
       }
       if (e.button !== 0 || this.gameFlow.blockInput || this.peepholeManager.isActive() || this.gameFlow.playerHidden || this.hideFadeTimer > 0) return;
@@ -1104,6 +1183,7 @@ export class Game {
       const shadowParanoia = this.shadows.update(delta, this.shadowFrame());
       if (shadowParanoia !== 0) this.gameFlow.addParanoia(shadowParanoia);
       if (this.isInGame()) this.updateTaskList();
+      this.updateObjectiveLine();
 
       // Update Player & Flashlight
       if (this.gameFlow.phase > GamePhase.MONTAGE) {

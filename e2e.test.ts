@@ -74,20 +74,27 @@ function startGame(d: Driver): void {
 }
 
 // Act 1 plays out by itself; optionally the player takes Dad's pistol and fires two nervous misses
+// Act 1: flashlight from the bedroom drawer, the blackout, the door comic, Dad's gun, the shooting.
+// Optionally the player fires two nervous misses before going down to the parents.
 function playAct1(d: Driver, nervousShots: boolean): void {
+  check('No flashlight in hand at the start', !d.flow.hasFlashlight && !d.flashlight.isTurnedOn());
+  check('Opens the bedroom desk drawer and takes the flashlight', d.takeFlashlight() && d.flashlight.isTurnedOn());
+  check('Dad\'s gun is locked away for now', !d.interact('gun_safe') || !d.flow.hasGun);
+  check('Blackout, the door unlocks, the door comic plays, the parents are in', d.waitForArrival(), d.phaseName);
+  check('Takes Dad\'s gun ("Take gun")', d.takeGun() && d.arsenal.getWeapon() === 'pistol');
   if (nervousShots) {
-    check('Takes the service pistol from the gun safe', d.interact('gun_safe'));
-    check('Pistol is in hand', d.arsenal.getWeapon() === 'pistol');
     const up = () => d.player.getPosition().clone().add(new THREE.Vector3(0.3, 2, 0)); // fire at the ceiling
     d.aimAt(up());
     d.click();
-    check('Nervous shot #1 fired during the movie', d.arsenal.getPistolAmmo() === 1);
-    check('Act 1 not over yet', d.runUntil(() => d.phase === GamePhase.ACT1_ARRIVAL, 40), d.phaseName);
+    check('Nervous shot #1 fired upstairs', d.arsenal.getPistolAmmo() === 1);
+    d.run(1.0);
     d.aimAt(up());
     d.click();
-    check('Nervous shot #2 fired as the "zombies" arrive', d.arsenal.getPistolAmmo() === 0);
+    check('Nervous shot #2 fired upstairs', d.arsenal.getPistolAmmo() === 0);
+    check('Shooting at nothing upstairs does not start the shooting scene', d.phase === GamePhase.ACT1_ARRIVAL);
   }
-  check('Act 1 ends and the cover-up begins', d.runUntil(() => d.phase === GamePhase.ACT2_COVERUP, 60), d.phaseName);
+  check('Goes down to the parents: the shooting', d.goToParents(), d.phaseName);
+  check('Act 1 ends and the cover-up begins', d.runUntil(() => d.phase === GamePhase.ACT2_COVERUP, 15), d.phaseName);
   check('Both parents are down: 2 bodies, 2 blood traces', d.evidence.getExposedBodiesCount() === 2 && d.evidence.getUncleanedTracesCount() === 2);
   d.run(0.5);
 }

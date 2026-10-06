@@ -130,6 +130,36 @@ export class Driver {
     return true;
   }
 
+  // --- Act 1, the way a player does it --------------------------------------------------------
+
+  // Open the desk drawer in the player's bedroom and take the flashlight
+  takeFlashlight(): boolean {
+    if (!this.flow.hasFlashlight && !this.interact('drawer_player')) return false;
+    if (!this.flow.hasFlashlight) this.interact('drawer_player');
+    return this.flow.hasFlashlight;
+  }
+
+  // Blackout -> door unlocks -> door comic -> the parents are in
+  waitForArrival(maxSeconds = 90): boolean {
+    return this.runUntil(() => this.phase === GamePhase.ACT1_ARRIVAL, maxSeconds);
+  }
+
+  takeGun(): boolean {
+    return this.interact('gun_safe') && this.flow.hasGun;
+  }
+
+  // Go down to the living room where the parents sway: with the gun, that starts the shooting
+  goToParents(maxSeconds = 20): boolean {
+    this.placePlayer(5.0, 9.35, 0);
+    return this.runUntil(() => this.phase >= GamePhase.ACT1_SHOOTING, maxSeconds);
+  }
+
+  // From free roam in Act 1 to the start of the cover-up
+  playThroughAct1(): boolean {
+    return this.takeFlashlight() && this.waitForArrival() && this.takeGun() && this.goToParents() &&
+      this.runUntil(() => this.phase === GamePhase.ACT2_COVERUP, 15);
+  }
+
   setFlashlight(on: boolean): void {
     if (this.flashlight.isTurnedOn() !== on) this.press('KeyF');
   }

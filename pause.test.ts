@@ -110,7 +110,7 @@ d.settle();
 check(`A 5s hitch advances the game by at most ${MAX_FRAME_DELTA}s`, Math.abs(game.getGameTime() - t0 - MAX_FRAME_DELTA) < 1e-9);
 
 // --- A visitor forcing their way in waits for the player to come back ------------------
-d.runUntil(() => d.phase === GamePhase.ACT2_COVERUP, 80);
+d.playThroughAct1();
 d.placePlayer(7.4, 10.6, 0);
 d.interact('switch_light_foyer');
 d.placePlayer(7.4, 10.6, 0);

@@ -10,7 +10,7 @@ import { SoundManager } from '../audio/SoundManager';
 import { HUD } from '../ui/HUD';
 import { Character } from '../world/characters';
 import { ComicOverlays } from '../ui/ComicOverlays';
-import { ComicPlayer } from '../ui/ComicPlayer';
+import { ComicPlayer, PageDef } from '../ui/ComicPlayer';
 import { findRoom } from '../world/houseLayout';
 
 export enum GamePhase {
@@ -36,6 +36,20 @@ export function getVisionMode(character: Character, paranoia: number, isLightnin
   if (isRoomLit) return false;
   return true;
 }
+
+// Act 1: find the flashlight in the blackout, then Dad's gun once the parents are in
+export const ACT1_MIN_BLACKOUT = 20;       // the door never unlocks sooner than this after the blackout
+export const ACT1_DOOR_UNLOCK_PAUSE = 1.5; // the key turns... then the comic
+export const ACT1_FLASHLIGHT_HINT_AFTER = 90;
+export const ACT1_GUN_HINT_AFTER = 120;
+export const ACT1_SHOOT_RANGE = 3.5;       // with the gun, on the ground floor, this close to a parent
+// Placeholder art (scenes from the intro comic) until the real panels arrive
+export const ACT1_ARRIVAL_PAGES: PageDef[] = [
+  { layout: 'stagger', panels: [
+    { scene: 8, sfx: { text: 'CLICK-CLACK', x: 50, y: 30, rot: -6, size: 60, color: 'yellow' }, cue: 'click', dur: 4.2, motion: 'in', origin: '60% 55%' },
+    { scene: 2, caption: "Dad's gun is in the master bedroom drawer.", cue: 'heartbeat', dur: 5.0, motion: 'left', origin: '55% 45%' }
+  ] }
+];
 
 const HIDDEN_PARANOIA_RATE = 10; // per second: dark and cramped
 // While a visitor is inside the house every paranoia rise is scaled down, so a player who stays
@@ -111,6 +125,13 @@ export class GameFlow {
   private visitorGoneTimer = 0;
   private forcedEntryTimer = -1; // counts down (game time) to a visitor pushing inside
 
+  // Act 1 items
+  public hasFlashlight = false;
+  public hasGun = false;
+  private doorUnlockTimer = -1;    // the front door just unlocked; the comic follows
+  private objective = '';
+  private objectiveHint = '';
+
   // Cover-up mechanics
   public playerHidden = false;     // inside the closet
   public carryingSheet = false;
@@ -161,6 +182,11 @@ export class GameFlow {
     this.disposeComic(); // Play Again: the comic plays again from the start
     this.playerHidden = false;
     this.carryingSheet = false;
+    this.hasFlashlight = false;
+    this.hasGun = false;
+    this.doorUnlockTimer = -1;
+    this.objective = '';
+    this.objectiveHint = '';
     this.nobodyHomeTimer = -1;
     this.searcher = null;
     this.searchTimer = -1;
@@ -314,9 +340,10 @@ export class GameFlow {
     this.fadeTimer = 0.6;
   }
 
-  private startComic(): void {
+  private startComic(pages?: PageDef[]): void {
     this.disposeComic();
     const comic = new ComicPlayer(document.body, {
+      pages,
       onCue: (cue) => SoundManager.getInstance().playComicCue(cue),
       onDone: () => {
         if (this.comic === comic) this.comicDone = true;
@@ -334,7 +361,7 @@ export class GameFlow {
 
   private doPhaseSetup(): void {
     const oldPhase = this.phase;
-    if (oldPhase === GamePhase.MONTAGE) this.disposeComic();
+    if (oldPhase === GamePhase.MONTAGE || oldPhase === GamePhase.ACT1_BLACKOUT) this.disposeComic();
     switch (this.phase) {
       case GamePhase.TITLE:
         this.phase = GamePhase.MONTAGE;
@@ -368,8 +395,10 @@ export class GameFlow {
         this.player.setFrozen(false);
         this.player.setPosition(4.3, 1.6, 6.5); // clear of the armchair (houseLayout.spawns.player)
         this.player.setYaw(Math.PI);
-        this.player.setFlashlight(true);
-        
+        // No flashlight in hand: it is in the desk drawer in the player's bedroom
+        this.player.setFlashlight(this.hasFlashlight);
+        this.setObjective('Home alone. Storm outside. Stay calm.');
+
         this.hud.showObjective('Home alone. Storm outside. Stay calm.');
         break;
       case GamePhase.ACT1_MOVIE:
@@ -377,16 +406,19 @@ export class GameFlow {
         this.phaseTimer = 0;
         this.isPowerOn = false;
         SoundManager.getInstance().playSiren();
-        
-        this.hud.showObjective('The power is out. Find your flashlight.');
+        this.setObjective(this.hasFlashlight ? 'Wait. Listen.' : 'Find the flashlight');
+
+        this.hud.showObjective('The power is out. Find the flashlight.');
         break;
       case GamePhase.ACT1_BLACKOUT:
         this.phase = GamePhase.ACT1_ARRIVAL;
         this.phaseTimer = 0;
         this.npcManager.spawnParents();
         this.narration.triggerBeat('act1_shadows');
-        
-        this.hud.showObjective('Something is at the door.');
+        this.player.setFrozen(false);
+        this.setObjective(this.hasGun ? 'Go downstairs' : "Get Dad's gun");
+
+        this.hud.showObjective("Get Dad's gun.");
         break;
       case GamePhase.ACT1_ARRIVAL:
         this.phase = GamePhase.ACT1_SHOOTING;
@@ -416,6 +448,7 @@ export class GameFlow {
         this.isPowerOn = true; // lights are switched off (setPhaseLighting) but the switches work again
         this.blockInput = false;
         this.narration.triggerBeat('act2_coverup');
+        this.setObjective('Cover it up before anyone comes');
         
         this.hud.showObjective('Hide the bodies, clean the blood, close the curtains, return the gun to the safe.');
         break;
@@ -680,27 +713,49 @@ export class GameFlow {
         }
         break;
       case GamePhase.ACT1_BLACKOUT:
-        // Could be a short pause before they arrive
-        if (this.phaseTimer >= 3) {
-          this.advancePhase();
-        }
-        break;
-      case GamePhase.ACT1_ARRIVAL:
-        // Parents walking in. After 25s, auto-shoot.
-        if (this.phaseTimer >= 25) {
-          this.advancePhase();
-        } else {
-          // A parent got within 1.5m (horizontally) before the player fired: panic shot
-          const targetPos = this.player.getPosition();
-          const inRange = this.npcManager.parents.some(parent => {
-            const p = parent.character.root.position;
-            return Math.hypot(p.x - targetPos.x, p.z - targetPos.z) <= 1.5;
-          });
-          if (inRange) {
-            this.advancePhase();
+        // Nobody comes until the flashlight is found (and the storm has had its moment)
+        if (this.comic) {
+          if (this.comicDone) {
+            this.comicDone = false;
+            this.advancePhase(); // -> ACT1_ARRIVAL
+          } else {
+            this.comic.update(delta);
           }
+        } else if (this.doorUnlockTimer >= 0) {
+          this.doorUnlockTimer -= delta;
+          if (this.doorUnlockTimer <= 0) {
+            this.doorUnlockTimer = -1;
+            this.player.setFrozen(true);
+            this.startComic(ACT1_ARRIVAL_PAGES);
+          }
+        } else if (this.hasFlashlight && this.phaseTimer >= ACT1_MIN_BLACKOUT) {
+          // A key turns in the front door
+          SoundManager.getInstance().playLampClick();
+          SoundManager.getInstance().playCreak();
+          this.narration.showCaption('Click. A key turns in the front door.', 2.5);
+          this.setObjective('Someone is at the front door');
+          this.doorUnlockTimer = ACT1_DOOR_UNLOCK_PAUSE;
+        } else if (!this.hasFlashlight && this.phaseTimer >= ACT1_FLASHLIGHT_HINT_AFTER && !this.objectiveHint) {
+          this.objectiveHint = 'Check the drawers in your room';
+          this.narration.showCaption('Check the drawers in your room.', 4.0);
         }
         break;
+      case GamePhase.ACT1_ARRIVAL: {
+        // The parents sway in the hall and living room. Nothing happens until the player has
+        // the gun and comes down to them: they never attack, so this can't soft-lock.
+        const targetPos = this.player.getPosition();
+        const near = this.player.getFloor() === 0 && this.npcManager.parents.some(parent => {
+          const p = parent.character.root.position;
+          return Math.hypot(p.x - targetPos.x, p.z - targetPos.z) <= ACT1_SHOOT_RANGE;
+        });
+        if (this.hasGun && near) {
+          this.advancePhase();
+        } else if (!this.hasGun && this.phaseTimer >= ACT1_GUN_HINT_AFTER && !this.objectiveHint) {
+          this.objectiveHint = "Dad's gun is in the master bedroom";
+          this.narration.showCaption("Dad's gun is in the master bedroom.", 4.0);
+        }
+        break;
+      }
       case GamePhase.ACT1_SHOOTING:
         // Delay before power comes back
         if (this.phaseTimer >= 1.8) {
@@ -820,8 +875,51 @@ export class GameFlow {
     this.evidence.addNoise(amount);
   }
 
-  public handlePlayerAttack(): void {
+  // --- Act 1 items ------------------------------------------------------------------------
+
+  public takeFlashlight(): void {
+    if (this.hasFlashlight) return;
+    this.hasFlashlight = true;
+    if (this.phase === GamePhase.ACT1_BLACKOUT && this.doorUnlockTimer < 0 && !this.comic) {
+      this.objectiveHint = '';
+      this.setObjective('Wait. Listen.');
+    }
+  }
+
+  // Dad's gun becomes available once the parents are in (after the door comic)
+  public isGunAvailable(): boolean {
+    return this.phase >= GamePhase.ACT1_ARRIVAL;
+  }
+
+  public takeGun(): void {
+    if (this.hasGun) return;
+    this.hasGun = true;
     if (this.phase === GamePhase.ACT1_ARRIVAL) {
+      this.objectiveHint = '';
+      this.setObjective('Go downstairs');
+    }
+  }
+
+  public isAct1ComicPlaying(): boolean {
+    return this.phase === GamePhase.ACT1_BLACKOUT && this.comic !== null;
+  }
+
+  // A click while the door comic plays (the pointer is locked, so the comic never sees it)
+  public advanceComic(): void {
+    if (this.isAct1ComicPlaying() && !this.isPaused) this.comic!.next();
+  }
+
+  public setObjective(text: string): void {
+    this.objective = text;
+    this.objectiveHint = '';
+  }
+
+  public getObjective(): { text: string; hint: string } {
+    return { text: this.objective, hint: this.objectiveHint };
+  }
+
+  public handlePlayerAttack(): void {
+    if (this.phase === GamePhase.ACT1_ARRIVAL && this.hasGun) {
       this.advancePhase(); // Transition to shooting
     }
   }
