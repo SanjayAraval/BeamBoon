@@ -564,13 +564,12 @@ export class Game {
   // Paranoia shadows
   // ---------------------------------------------------------------------------
 
-  // Shadows only exist during free play: not in cutscenes, the comic, the title, the peephole,
-  // the closet, the pause menu or the ending
+  // Shadows only come once the lights are back on after the shooting (ACT1_POWER_BACK onward),
+  // and never in cutscenes (blocked input), the peephole, the closet, the pause menu or the ending
   private shadowsAllowed(): boolean {
     const p = this.gameFlow.phase;
-    const freePlay = p === GamePhase.ACT1_MOVIE || p === GamePhase.ACT1_BLACKOUT || p === GamePhase.ACT1_ARRIVAL ||
-      (p >= GamePhase.ACT2_COVERUP && p <= GamePhase.VISITOR_PARTNER);
-    return freePlay && !this.gameFlow.isPaused && !this.gameFlow.blockInput && !this.peepholeManager.isActive() &&
+    const afterShooting = p >= GamePhase.ACT1_POWER_BACK && p <= GamePhase.VISITOR_PARTNER;
+    return afterShooting && !this.gameFlow.isPaused && !this.gameFlow.blockInput && !this.peepholeManager.isActive() &&
       !this.gameFlow.playerHidden && this.hideFadeTimer <= 0;
   }
 

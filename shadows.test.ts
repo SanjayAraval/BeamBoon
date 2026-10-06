@@ -131,6 +131,24 @@ console.log('--- RUNNING PARANOIA SHADOWS TEST ---');
   holdParanoia(d, 80, 15);
   check('No shadows during the intro cutscene', sh.stats.spawned === 0);
 
+  // The rest of Act 1 up to the shooting: dark kitchen, paranoia pinned high, still nothing
+  d.holdKey('Space', 1.2);
+  d.runUntil(() => d.phase === GamePhase.ACT1_MOVIE, 3);
+  const seen = new Set<string>();
+  const frames = Math.round(70 / FRAME);
+  for (let i = 0; i < frames && d.phase < GamePhase.ACT1_POWER_BACK; i++) {
+    if (d.phase === GamePhase.ACT1_MOVIE || d.phase === GamePhase.ACT1_BLACKOUT || d.phase === GamePhase.ACT1_ARRIVAL) {
+      d.placePlayer(KITCHEN.x, KITCHEN.z, 0);
+      d.setFlashlight(false);
+    }
+    seen.add(GamePhase[d.phase]);
+    d.flow.paranoia = 80;
+    d.run(FRAME);
+  }
+  check(`Played through ${[...seen].join(', ')}`, ['ACT1_MOVIE', 'ACT1_BLACKOUT', 'ACT1_ARRIVAL', 'ACT1_SHOOTING'].every(p => seen.has(p)));
+  check('No shadows anywhere in Act 1 before the power comes back (paranoia 80, in the dark)', sh.stats.spawned === 0, `${sh.stats.spawned} spawned`);
+  check('Shadows are allowed again from ACT1_POWER_BACK onward', d.runUntil(() => d.phase === GamePhase.ACT2_COVERUP, 10) && (d.game as any).shadowFrame().active === true);
+
   const d2 = newGame(13);
   const sh2 = shadowsOf(d2);
   check('Peephole entered', d2.interact('peephole') && (d2.game as any).peepholeManager.isActive());
