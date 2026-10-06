@@ -1,61 +1,75 @@
-# CoverUp - Dark Comic-Noir 3D Horror Game
+# CoverUp
 
-**CoverUp** is a first-person 3D psychological horror game created with Three.js, TypeScript, and Vite. Everything runs 100% client-side with procedurally generated low-poly geometry, canvas textures, and Web Audio synthesis.
+Play: <itch link>
 
----
+A paranoid teenager is home alone on a stormy night, watching a zombie movie, when the power
+cuts out. His parents come home drunk from a costume party, and in the dark, with his nerves
+shot, he sees two zombies walking through the front door. His father is a police officer, and
+the service pistol is upstairs. When the lights come back on he understands what he has done.
+The rest of the night is a desperate cover-up: hide the bodies, scrub the blood, put the gun
+away and get rid of the neighbour, the patrol officer and his father's partner when they
+knock, while his paranoia keeps turning shadows and visitors into monsters. Four endings:
+clean, caught, run, or breakdown.
 
-## 📖 Premise
+CoverUp is a first-person 3D horror game in a comic-noir style. It runs in the browser
+(Three.js, TypeScript, Vite), and every model, texture, sound and comic panel is generated in
+code. See [CREDITS.md](CREDITS.md).
 
-A paranoid young man watches a zombie movie alone at night. His parents return home drunk from a costume party. In his hyper-vigilant panic, he mistakes them for undead monsters. His father is a veteran police officer, so the service pistol rests in the closet...
+## Controls
 
-After the shooting, the lights come on, and he realizes what he has done. The rest of the night is a desperate cover-up while his escalating paranoia keeps tricking his mind.
-
----
-
-## 🎮 Controls
-
-| Action | Control |
+| Key / input | Action |
 | :--- | :--- |
-| **Movement** | `WASD` |
-| **Look Around** | `Mouse` (Click to lock cursor) |
-| **Interact / Clean / Hide** | `E` |
-| **Toggle Flashlight** | `F` |
-| **Switch Weapon** | `1` (Knife) / `2` (Pistol) / `Scroll` |
-| **Exit Peephole** | `E` / `Q` / `Right Click` |
-| **Attack / Shoot** | `Left Click` |
-| **Talk at Front Door** | `T` (stand near the front door) |
-| **Pause Menu** | `ESC` |
-| **Restart Game** | `R` twice |
-| **Flee (Run ending)** | `E` twice on the rear door during the cover-up |
+| `W` `A` `S` `D` | Move |
+| Mouse | Look around (click the game to lock the cursor) |
+| `E` | Interact: pick up, hide a body, clean blood, toggle lights, open doors, look through the peephole |
+| `E` twice on the rear door | Flee (run ending), during the cover-up |
+| `T` | Talk to the visitor (stand at the front door) |
+| Left click | Attack / shoot |
+| `1` / `2` | Knife / pistol |
+| Mouse wheel | Cycle weapons |
+| `F` | Flashlight on/off |
+| `E`, `Q` or right click | Leave the peephole |
+| `Esc` | Pause menu (Resume, Settings, Restart) |
+| `R` twice | Restart |
+| Click / `Space` | Opening comic: next panel / next page |
+| Hold `Enter` | Skip the opening comic |
+| Hold `Space` | Skip the sofa intro |
 
----
+Debug keys (only with `?debug=1` in the URL): `N` next phase, `F3` debug overlay,
+`F4` collision boxes, `F5` teleport to the next room, `F6` log position, `F7` prop labels,
+`F8` light gizmos, `F9` toggle all lights.
 
-## 🛠️ Setup & Running Locally
+## How to run
 
-1. **Install Dependencies**:
-   ```bash
-   npm install
-   ```
+Requires Node.js 18 or newer.
 
-2. **Start Local Dev Server**:
-   ```bash
-   npm run dev
-   ```
-   Open your browser at `http://localhost:3000`.
+```bash
+npm install
+npm run dev
+```
 
-3. **Build Production Bundle**:
-   ```bash
-   npm run build
-   ```
+Then open http://localhost:3000.
 
----
+## How to build
 
-## 📦 Itch.io HTML5 Export Guide
+```bash
+npm run build
+```
 
-The project is pre-configured in `vite.config.ts` with `base: './'` for seamless relative asset resolution when packaged for itch.io or static HTML5 hosting.
+This type-checks and writes a static build to `dist/`. `vite.config.ts` sets `base: './'`, so
+the build works from any folder or from itch.io: zip the contents of `dist/` (with
+`index.html` at the top level of the zip) and upload it as an HTML5 game. Preview the build
+locally with `npm run preview`.
 
-To package for itch.io:
-1. Run `npm run build`.
-2. Zip the contents of the `dist/` directory:
-   - Ensure `index.html` is at the root of the zip archive.
-3. Upload the zip file to your itch.io project page and select **"Play in browser"**.
+Tests: `npm test` runs the type check, the unit tests and an end-to-end playthrough to each of
+the four endings (`npm run test:e2e`).
+
+## Team
+
+**Packet Loss**
+
+- <name 1>
+- <name 2>
+- <name 3>
+- <name 4>
+- <name 5>
