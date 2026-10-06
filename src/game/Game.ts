@@ -20,6 +20,8 @@ import { propsLayout } from '../world/propsLayout';
 import { InteractionSystem } from './InteractionSystem';
 import { Textures } from '../world/Textures';
 import { npcLayout } from '../world/npcLayout';
+import { lightsLayout } from '../world/lightsLayout';
+import { ParanoiaShadows, ShadowFrame } from './ParanoiaShadows';
 
 const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).get('debug') === '1';
 const FRONT_DOOR = new THREE.Vector3(7.4, 0, 12.0);
@@ -77,6 +79,7 @@ export class Game {
   private bloodDecals = new Map<string, THREE.Mesh>();
   private bedSheets = new Map<string, THREE.Mesh>();   // white top layer on each bed, hidden once taken
   private bodySheets = new Map<string, THREE.Group>(); // sheet draped over a body
+  private shadows!: ParanoiaShadows;
   private hideFadeTimer = -1;
   private hideFadeAction: (() => void) | null = null;
   private preHide: { x: number; y: number; z: number; yaw: number; pitch: number } | null = null;
@@ -159,6 +162,13 @@ export class Game {
       (ending) => this.triggerEnding(ending)
     );
     this.gameFlow.onReset = () => this.resetCoverUpVisuals();
+    this.shadows = new ParanoiaShadows({
+      scene: this.scene,
+      colliders: this.house.collisionBoxes,
+      isSpotLit: (x, z, floor) => this.gameFlow.isSpotLit(x, z, floor),
+      isLampOnNear: (point, radius) => this.isLampOnNear(point, radius),
+      onAppear: () => this.soundManager.playBreath()
+    });
     // The shot is fired with Dad's service pistol whether or not the player fetched it first
     this.gameFlow.onParentsShot = () => {
       this.arsenal.unlockPistol();
@@ -501,6 +511,7 @@ export class Game {
 
   private enterHiding(): void {
     if (this.gameFlow.playerHidden || !this.gameFlow.canHide()) return;
+    this.shadows.clear();
     this.interactionSystem.setEnabled(false);
     this.player.setFrozen(true);
     this.hideFade(() => {
@@ -535,6 +546,7 @@ export class Game {
 
   // Play Again: beds made, sheets gone, out of the closet
   private resetCoverUpVisuals(): void {
+    this.shadows?.clear();
     for (const [bedId, sheet] of this.bedSheets) {
       if (!sheet.visible) this.registerSheet(bedId);
       sheet.visible = true;
@@ -548,12 +560,56 @@ export class Game {
     this.updateCarryStatus();
   }
 
+  // ---------------------------------------------------------------------------
+  // Paranoia shadows
+  // ---------------------------------------------------------------------------
+
+  // Shadows only exist during free play: not in cutscenes, the comic, the title, the peephole,
+  // the closet, the pause menu or the ending
+  private shadowsAllowed(): boolean {
+    const p = this.gameFlow.phase;
+    const freePlay = p === GamePhase.ACT1_MOVIE || p === GamePhase.ACT1_BLACKOUT || p === GamePhase.ACT1_ARRIVAL ||
+      (p >= GamePhase.ACT2_COVERUP && p <= GamePhase.VISITOR_PARTNER);
+    return freePlay && !this.gameFlow.isPaused && !this.gameFlow.blockInput && !this.peepholeManager.isActive() &&
+      !this.gameFlow.playerHidden && this.hideFadeTimer <= 0;
+  }
+
+  private isLampOnNear(point: THREE.Vector3, radius: number): boolean {
+    if (!this.gameFlow.isPowerOn) return false;
+    for (const def of lightsLayout) {
+      if (def.type === 'street') continue;
+      if (this.house.lightManager.getLight(def.id)?.isOn && def.position.distanceTo(point) <= radius) return true;
+    }
+    return false;
+  }
+
+  public shadowFrame(): ShadowFrame {
+    const eye = this.camera.position.clone();
+    const forward = new THREE.Vector3();
+    this.camera.getWorldDirection(forward);
+    return {
+      active: this.shadowsAllowed(),
+      paranoia: this.gameFlow.paranoia,
+      eye,
+      forward,
+      floor: this.player.getFloor(),
+      flashlight: {
+        on: this.flashlight.isTurnedOn(),
+        origin: eye,
+        dir: forward,
+        range: this.flashlight.getRange(),
+        halfAngle: this.flashlight.getConeAngle()
+      }
+    };
+  }
+
   public isHidingTransition(): boolean {
     return this.hideFadeTimer > 0;
   }
 
   private enterPeephole(): void {
     if (this.peepholeManager.isActive()) return;
+    this.shadows.clear();
     this.peepholeManager.enter(this.flashlight);
     this.hud.togglePeepholeMode(true);
     this.interactionSystem.setEnabled(false); // disable while peeking
@@ -610,6 +666,7 @@ export class Game {
   // ---------------------------------------------------------------------------
 
   private pause(): void {
+    this.shadows.clear();
     this.gameFlow.setPaused(true);
     this.pauseMenu.show();
   }
@@ -718,6 +775,7 @@ export class Game {
   }
 
   private triggerEnding(ending: EndingData): void {
+    this.shadows.clear();
     this.exitPeephole();
     document.getElementById('hide-overlay')?.classList.add('hidden');
     document.getElementById('task-list')?.classList.add('hidden');
@@ -1039,6 +1097,8 @@ export class Game {
         }
       }
       this.gameFlow.update(delta, this.flashlight.isTurnedOn(), time);
+      const shadowParanoia = this.shadows.update(delta, this.shadowFrame());
+      if (shadowParanoia !== 0) this.gameFlow.addParanoia(shadowParanoia);
       if (this.isInGame()) this.updateTaskList();
 
       // Update Player & Flashlight

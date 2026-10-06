@@ -38,6 +38,9 @@ export function getVisionMode(character: Character, paranoia: number, isLightnin
 }
 
 const HIDDEN_PARANOIA_RATE = 10; // per second: dark and cramped
+// While a visitor is inside the house every paranoia rise is scaled down, so a player who stays
+// hidden can outlast the search (hidden rate 10/s becomes 3.5/s)
+export const VISITOR_INSIDE_PARANOIA_FACTOR = 0.35;
 const NOBODY_HOME_WAIT = 20; // seconds a visitor waits after a knock nobody answered
 const SEARCH_DURATION = 25; // seconds a visitor who let themselves in looks around
 const SEARCH_ROUTE = ['living_room', 'kitchen', 'dining', 'foyer', 'stairs_top', 'master_bedroom'];
@@ -224,6 +227,26 @@ export class GameFlow {
 
   public isVisitorSearching(): boolean {
     return this.searcher !== null;
+  }
+
+  public isVisitorInside(): boolean {
+    return this.searcher !== null;
+  }
+
+  // Paranoia rises are scaled while a visitor is inside; relief is not
+  private riseFactor(): number {
+    return this.isVisitorInside() ? VISITOR_INSIDE_PARANOIA_FACTOR : 1;
+  }
+
+  // Paranoia from outside GameFlow (e.g. paranoia shadows)
+  public addParanoia(amount: number): void {
+    const scaled = amount > 0 ? amount * this.riseFactor() : amount;
+    this.paranoia = Math.max(0, Math.min(100, this.paranoia + scaled));
+    this.hud.updateParanoia(this.paranoia);
+  }
+
+  public isSpotLit(x: number, z: number, floor: number): boolean {
+    return this.isLocationLit(x, z, floor);
   }
 
   public getNobodyHomeTimer(): number {
@@ -598,7 +621,7 @@ export class GameFlow {
           this.lightningTimer = 0.3; // Flash duration
           
           // Add paranoia burst
-          this.paranoia = Math.min(100, this.paranoia + 3);
+          this.paranoia = Math.min(100, this.paranoia + 3 * this.riseFactor());
         } else {
           // End lightning flash
           this.isLightning = false;
@@ -622,6 +645,7 @@ export class GameFlow {
       }
     }
     
+    if (paranoiaDelta > 0) paranoiaDelta *= this.riseFactor();
     this.paranoia = Math.max(0, Math.min(100, this.paranoia + paranoiaDelta));
     this.hud.updateParanoia(this.paranoia);
     

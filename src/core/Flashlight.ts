@@ -79,6 +79,15 @@ export class Flashlight {
     return this.spotLight.position;
   }
 
+  // Half-angle of the beam cone (radians) and how far it reaches
+  public getConeAngle(): number {
+    return this.spotLight.angle;
+  }
+
+  public getRange(): number {
+    return this.spotLight.distance;
+  }
+
   public getDirection(): THREE.Vector3 {
     const dir = new THREE.Vector3();
     this.camera.getWorldDirection(dir);

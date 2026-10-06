@@ -377,9 +377,12 @@ function visitorSearchesWhileHidden(): void {
   check('Walking past the sheet in the living room makes them suspicious (not a witness)',
     d.runUntil(() => d.evidence.calculateSuspicion() > suspicionBefore, 8) && d.phase !== GamePhase.ENDING,
     `${suspicionBefore.toFixed(2)} -> ${d.evidence.calculateSuspicion().toFixed(2)}`);
-  // At 10 paranoia/s the player breaks down about 10s into hiding, before the 25s search ends
-  d.runUntil(() => d.phase === GamePhase.ENDING, 20);
-  check('(Spec conflict, recorded) staying hidden through the 25s search ends in BREAKDOWN', ending() === 'breakdown', `${ending()}`);
+  // While a visitor is inside, paranoia rises at 0.35x: hidden 10/s becomes 3.5/s, so the 25s search is survivable
+  const startParanoia = d.flow.paranoia;
+  check('Visitor leaves after the 25s search and the hidden player holds out',
+    d.runUntil(() => !d.flow.isVisitorSearching(), 26) && d.phase !== GamePhase.ENDING && ending() === null,
+    `ending ${ending()}, paranoia ${startParanoia.toFixed(0)} -> ${d.flow.paranoia.toFixed(0)}`);
+  check(`Paranoia stayed under 100 (${startParanoia.toFixed(0)} -> ${d.flow.paranoia.toFixed(0)})`, d.flow.paranoia < 100);
 }
 
 // Engine logs (phase changes, light dumps) would bury the results
